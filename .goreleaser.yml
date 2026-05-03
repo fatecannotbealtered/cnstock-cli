@@ -1,0 +1,43 @@
+version: 2
+
+project_name: cnstock-cli
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: ./cmd/cnstock-cli
+    binary: cnstock-cli
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X github.com/fatecannotbealtered/cnstock-cli/cmd.version={{ .Version }}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    wrap_in_directory: false
+    files:
+      - none*
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  disable: true

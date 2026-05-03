@@ -1,0 +1,52 @@
+{
+  "name": "@fatecannotbealtered-/cnstock-cli",
+  "version": "1.0.0",
+  "description": "Real-time quotes, K-line, intraday minutes, and stock search for A/HK/US stocks — for humans and AI Agents",
+  "keywords": [
+    "cnstock",
+    "finance",
+    "stock",
+    "cli",
+    "ai-agent",
+    "a-share",
+    "hk-stock",
+    "us-stock",
+    "openclaw"
+  ],
+  "author": "guosong6886@gmail.com",
+  "homepage": "https://github.com/fatecannotbealtered/cnstock-cli#readme",
+  "bugs": {
+    "url": "https://github.com/fatecannotbealtered/cnstock-cli/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fatecannotbealtered/cnstock-cli.git"
+  },
+  "license": "MIT",
+  "bin": {
+    "cnstock-cli": "scripts/run.js"
+  },
+  "scripts": {
+    "postinstall": "node scripts/install.js"
+  },
+  "files": [
+    "scripts/install.js",
+    "scripts/run.js",
+    "skills/",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md"
+  ],
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "engines": {
+    "node": ">=16"
+  }
+}
