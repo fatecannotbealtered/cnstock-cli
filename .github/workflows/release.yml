@@ -76,15 +76,15 @@ jobs:
         run: |
           VERSION="${GITHUB_REF#refs/tags/v}"
           # Extract the section for this version (from ## [x.y.z] to the next ## [)
-          sed -n "/^## \[${VERSION}\]/,/^## \[/p" CHANGELOG.md | sed '$ { /^## \[/d }' > release-notes.md
+          sed -n "/^## \[${VERSION}\]/,/^## \[/p" CHANGELOG.md | sed '$ { /^## \[/d }' > /tmp/release-notes.md
           # Fallback: if extraction produced nothing, use the whole file
-          [ -s release-notes.md ] || cp CHANGELOG.md release-notes.md
+          [ -s /tmp/release-notes.md ] || cp CHANGELOG.md /tmp/release-notes.md
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
-          args: release --clean --release-notes=release-notes.md
+          args: release --clean --release-notes=/tmp/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
