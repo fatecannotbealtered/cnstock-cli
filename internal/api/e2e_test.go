@@ -251,12 +251,12 @@ func TestE2E_KlineNoAdjustment(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	bars, err := FetchKline(bg, NewClient(), "sh600519", "day", 4, "none")
-	if err != nil {
-		t.Fatalf("FetchKline error: %v", err)
+	_, err := FetchKline(bg, NewClient(), "sh600519", "day", 4, "none")
+	if err == nil {
+		t.Fatal("expected error for adj=none with no matching data")
 	}
-	if len(bars) != 0 {
-		t.Errorf("expected 0 bars with adj=none, got %d", len(bars))
+	if _, ok := err.(*NotFoundError); !ok {
+		t.Errorf("expected NotFoundError, got %T: %v", err, err)
 	}
 }
 

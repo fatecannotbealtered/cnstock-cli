@@ -76,12 +76,12 @@ func parseKlineResponse(text string, symbol, market, period, adjParam string) ([
 
 	stockRaw, ok := dataMap[symbol]
 	if !ok {
-		return nil, nil
+		return nil, newNotFoundError("no kline data for %s", symbol)
 	}
 
 	var stockData map[string]json.RawMessage
 	if err := json.Unmarshal(stockRaw, &stockData); err != nil {
-		return nil, nil
+		return nil, newNotFoundError("no kline data for %s", symbol)
 	}
 
 	keys := klineDataKeys(market, period, adjParam)
@@ -95,14 +95,14 @@ func parseKlineResponse(text string, symbol, market, period, adjParam string) ([
 			}
 		}
 	}
-	if !found {
-		return nil, nil
+	if !found || len(klinesRaw) == 0 {
+		return nil, newNotFoundError("no kline data for %s", symbol)
 	}
 
 	var bars []KlineBar
 	for _, raw := range klinesRaw {
-		var fields []string
-		if err := json.Unmarshal(raw, &fields); err != nil || len(fields) < 6 {
+		fields := extractKlineFields(raw)
+		if len(fields) < 6 {
 			continue
 		}
 		bars = append(bars, KlineBar{
@@ -125,6 +125,24 @@ func klineDataKeys(market, period, adjParam string) []string {
 		return []string{adjParam + period, period}
 	}
 	return []string{period}
+}
+
+// extractKlineFields parses a JSON array that may contain mixed types (strings,
+// objects, numbers) and returns only the string elements. This handles endpoints
+// like hkfqkline where bars contain extra non-string fields (e.g. {} objects).
+func extractKlineFields(raw json.RawMessage) []string {
+	var elements []json.RawMessage
+	if err := json.Unmarshal(raw, &elements); err != nil {
+		return nil
+	}
+	var fields []string
+	for _, el := range elements {
+		var s string
+		if err := json.Unmarshal(el, &s); err == nil {
+			fields = append(fields, s)
+		}
+	}
+	return fields
 }
 
 // parseOptionalFloat parses s as a float64; returns nil for empty or invalid input.

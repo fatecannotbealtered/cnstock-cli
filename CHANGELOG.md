@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-05-06
+
+### Fixed
+
+- **HK/US stock kline returning null**: The `hkfqkline` and `usfqkline` endpoints return bars with mixed-type arrays (includes `{}` objects alongside strings), which caused `json.Unmarshal` into `[]string` to fail silently, skipping all bars. The parser now extracts string fields individually from mixed-type arrays.
+- **US stock minute returning null**: US stock minute data only has 3 fields (time, price, volume, no amount), but the parser required at least 4. Now accepts 3+ fields with amount as optional.
+- **Kline returning null for invalid symbols**: `kline` now returns `NOT_FOUND` error (exit code 4) when the symbol has no data, instead of silently returning null.
+
 ## [1.0.1] - 2026-05-06
 
 ### Fixed

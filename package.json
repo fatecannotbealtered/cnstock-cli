@@ -1,6 +1,6 @@
 {
   "name": "@fatecannotbealtered-/cnstock-cli",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Real-time quotes, K-line, intraday minutes, and stock search for A/HK/US stocks — for humans and AI Agents",
   "keywords": [
     "cnstock",

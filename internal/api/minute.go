@@ -48,15 +48,18 @@ func parseMinuteResponse(text string, symbol string) ([]MinuteTick, error) {
 	var ticks []MinuteTick
 	for _, item := range stockData.Data.Data {
 		parts := strings.Fields(item)
-		if len(parts) < 4 {
+		if len(parts) < 3 {
 			continue
 		}
-		ticks = append(ticks, MinuteTick{
+		tick := MinuteTick{
 			Time:   parts[0],
 			Price:  parseOptionalFloat(parts[1]),
 			Volume: parseOptionalFloat(parts[2]),
-			Amount: parseOptionalFloat(parts[3]),
-		})
+		}
+		if len(parts) >= 4 {
+			tick.Amount = parseOptionalFloat(parts[3])
+		}
+		ticks = append(ticks, tick)
 	}
 	return ticks, nil
 }
