@@ -1,14 +1,14 @@
 ---
 name: cnstock-cli
 description: "Real-time quotes, K-line history, intraday minutes, and stock search for A-shares, HK stocks, US stocks via Tencent Finance web endpoints. No API key required. NOT an official API - for personal/research use only."
-metadata: {"openclaw":{"emoji":"??","requires":{"bins":["cnstock-cli"]}}}
+metadata: {"openclaw":{"emoji":"📈","requires":{"bins":["cnstock-cli"]}}}
 ---
 
 # cnstock-cli
 
 Query financial data through Tencent Finance web endpoints. No API key required.
 
-> **IMPORTANT: This is NOT an official Tencent API.** The endpoints are observed from Tencent Finance public web pages. There is no official documentation, SLA, schema contract, or rate-limit policy. Use for personal lookup and research only ? NOT for trading, commercial products, or compliance-sensitive workloads.
+> **IMPORTANT: This is NOT an official Tencent API.** The endpoints are observed from Tencent Finance public web pages. There is no official documentation, SLA, schema contract, or rate-limit policy. Use for personal lookup and research only — NOT for trading, commercial products, or compliance-sensitive workloads.
 
 > Install CLI: `npm install -g @fatecannotbealtered-/cnstock-cli`
 >
@@ -20,20 +20,20 @@ Use when the user asks about stock prices, market data, K-line history, intraday
 
 ## Commands
 
-### quote ? Real-time Quotes
+### quote — Real-time Quotes
 
 ```bash
 cnstock-cli quote <symbols> [--json]
 ```
 
 - Comma-separated codes, auto-detect market:
-  - `600519`, `sh600519`, `sz000858` ? A-share
-  - `00700`, `hk00700` ? HK stock
-  - `AAPL`, `usAAPL`, `usTSLA` ? US stock
-  - `sh000001`, `sz399001` ? Index
+  - `600519`, `sh600519`, `sz000858` → A-share
+  - `00700`, `hk00700` → HK stock
+  - `AAPL`, `usAAPL`, `usTSLA` → US stock
+  - `sh000001`, `sz399001` → Index
 - Output: price, change, OHLCV, bid/ask depth (5 levels for A-shares), PE ratio, turnover
 
-### kline ? Historical K-line
+### kline — Historical K-line
 
 ```bash
 cnstock-cli kline <symbol> [--period day|week|month] [--limit N] [--adj qfq|hfq|none] [--json]
@@ -43,7 +43,7 @@ cnstock-cli kline <symbol> [--period day|week|month] [--limit N] [--adj qfq|hfq|
 - `--limit` accepts 1-500
 - Use `--adj none` for unadjusted data
 
-### minute ? Intraday Minutes
+### minute — Intraday Minutes
 
 ```bash
 cnstock-cli minute <symbol> [--json]
@@ -52,16 +52,16 @@ cnstock-cli minute <symbol> [--json]
 - Returns all minute-level ticks for the current trading day
 - Fields: time, price, volume, amount
 
-### search ? Name Search
+### search — Name Search
 
 ```bash
 cnstock-cli search <keyword> [--json]
 ```
 
-- Supports Chinese (??), pinyin (mt), English (apple)
+- Supports Chinese (茅台), pinyin (mt), English (apple)
 - Returns matching stocks across all markets
 
-### reference ? Self-description
+### reference — Self-description
 
 ```bash
 cnstock-cli reference
@@ -71,8 +71,8 @@ cnstock-cli reference
 
 ## Global Flags
 
-- `--json` ? Output as JSON (machine-readable)
-- `--quiet` ? Suppress non-JSON stdout output
+- `--json` — Output as JSON (machine-readable)
+- `--quiet` — Suppress non-JSON stdout output
 
 ## JSON Output Schemas
 
@@ -81,8 +81,8 @@ cnstock-cli reference
 ```json
 {
   "symbol": "sh600519",
-  "market": "A?",
-  "name": "????",
+  "market": "A股",
+  "name": "贵州茅台",
   "code": "600519",
   "price": 1800.00,
   "prev_close": 1784.50,
@@ -130,8 +130,8 @@ cnstock-cli reference
 ```json
 {
   "symbol": "sh600519",
-  "name": "????",
-  "market": "A????",
+  "name": "贵州茅台",
+  "market": "A股（沪）",
   "pinyin": "GZMT"
 }
 ```
@@ -184,7 +184,7 @@ See `symbols.json` in the same directory for a list of 71 common stock codes acr
 ## Notes
 
 - No API key is required
-- **NOT an official Tencent API** ? endpoints are from public web pages, may change without notice
+- **NOT an official Tencent API** — endpoints are from public web pages, may change without notice
 - No formal SLA, schema contract, or rate-limit policy exists
 - The CLI follows redirects and decodes both UTF-8 and GB18030 responses
 - US stock K-line data may be sparse for recent dates

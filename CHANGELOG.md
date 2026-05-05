@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-05-06
+
+### Fixed
+
+- **SKILL.md encoding**: Fixed Chinese characters and emojis displayed as `?` in the AI Agent skill file.
+- **reference command encoding**: Fixed Chinese characters in JSON schema examples showing as `?`.
+- **Exchange prefix mapping**: Made `cnPrefixForSixDigit` explicit for all first-digit ranges (5=SH ETF, 9=SH B-shares, 1/2=SZ bonds/B-shares) instead of relying on default fallback.
+
+### Added
+
+- **Output unit tests**: Added tests for `runeWidth`, `isCJK`, `stripAnsi`, `truncate`, `formatFloat`, `ChangeColor`, `Table` (CJK, truncation, quiet mode), `PrintJSON`, `PrintErrorJSON`, and `hintForCode`.
+- **Lint tests integrated**: Added `test/lint/lint_test.go` with `TestGofmt` and `TestGoVet` — formatting and static analysis now run as part of `go test ./...`.
+- **Symbol test coverage**: Added test cases for SH ETF (5xxxxx), SH B-shares (9xxxxx), SZ bonds (1xxxxx), SZ B-shares (2xxxxx).
+
+### Changed
+
+- **Release workflow**: GitHub Release notes now extract only the current version's section from CHANGELOG.md instead of including the full file.
+
 ## [1.0.0] - 2026-05-03
 
 Initial release of cnstock-cli.
@@ -33,5 +51,6 @@ Initial release of cnstock-cli.
 - **Data source disclaimer**: Endpoints are from Tencent Finance public web pages, NOT an official API. No SLA, no schema contract, no rate-limit policy. For personal/research use only.
 - **Non-affiliation**: Not an official Tencent product; data rights remain with their respective holders.
 
-[Unreleased]: https://github.com/fatecannotbealtered/cnstock-cli/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/fatecannotbealtered/cnstock-cli/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/fatecannotbealtered/cnstock-cli/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/fatecannotbealtered/cnstock-cli/releases/tag/v1.0.0

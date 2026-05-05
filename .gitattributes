@@ -1,0 +1,22 @@
+# Ensure consistent LF line endings across platforms
+* text=auto eol=lf
+
+# Go source files
+*.go text eol=lf
+
+# Shell scripts always LF
+*.sh text eol=lf
+Makefile text eol=lf
+
+# Windows-specific files keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files - no EOL conversion
+*.exe binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.tar.gz binary

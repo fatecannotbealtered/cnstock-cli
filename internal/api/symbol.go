@@ -72,15 +72,21 @@ func NormalizeSymbol(symbol string) (string, error) {
 
 // cnPrefixForSixDigit picks the exchange prefix for a 6-digit A-share code.
 //
-// Reference: Shanghai (sh) 6/5/9 first digit; Shenzhen (sz) 0/3 first digit;
-// Beijing (bj) 4/8 first digit. Anything else falls back to sz to preserve historical
-// behavior; callers can still use an explicit `sh`/`sz`/`bj` prefix to override.
+// Reference:
+//
+//	Shanghai  (sh): 6xxxxx (main board), 5xxxxx (ETF/futures), 9xxxxx (B-shares)
+//	Shenzhen  (sz): 0xxxxx (main board), 3xxxxx (ChiNext), 1xxxxx/2xxxxx (bonds/B-shares)
+//	Beijing   (bj): 4xxxxx, 8xxxxx
+//
+// Callers can still use an explicit `sh`/`sz`/`bj` prefix to override.
 func cnPrefixForSixDigit(code string) string {
 	switch code[0] {
 	case '4', '8':
 		return "bj"
 	case '0', '1', '2', '3':
 		return "sz"
+	case '5', '6', '9':
+		return "sh"
 	default:
 		return "sh"
 	}
