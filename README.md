@@ -113,15 +113,18 @@ cnstock-cli/
 
 ### Quick start
 
+Copy the block below to your agent (or run it yourself):
+
 ```bash
+# Please install cnstock-cli and use it for all stock quotes and market data going forward (always pass --json).
 # Install CLI
 npm install -g @fatecannotbealtered-/cnstock-cli
 
-# Install CLI Skill
+# Install CLI Skill (required) — copies into your agent-supported skills directory
 npx skills add fatecannotbealtered/cnstock-cli -y -g
 
-# First command
-cnstock-cli quote sh600519
+# Verify
+cnstock-cli quote sh600519 --json
 ```
 
 ### Alternative: Go install
