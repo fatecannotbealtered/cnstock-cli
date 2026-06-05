@@ -29,13 +29,22 @@ func runSectors(cmd *cobra.Command, args []string) error {
 	top, _ := cmd.Flags().GetInt("top")
 	direction, _ := cmd.Flags().GetString("direction")
 
+	if outputFormat == "raw" {
+		raw, err := api.FetchSectorsRaw(cmd.Context(), client, board, direction, top)
+		if err != nil {
+			return handleError(err)
+		}
+		output.Raw(raw)
+		return nil
+	}
+
 	sectors, err := api.FetchSectors(cmd.Context(), client, board, direction, top)
 	if err != nil {
 		return handleError(err)
 	}
 
-	if jsonMode {
-		output.PrintJSON(sectors)
+	if outputFormat != "text" {
+		emitJSON(sectors)
 		return nil
 	}
 

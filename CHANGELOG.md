@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-06-05
+
+### Added
+
+- **`sectors` command**: Industry/concept/region board ranking via Tencent's ranking endpoint. Flags `--board hy|gn|dy`, `--top N` (1-50), `--direction up|down` (up = top gainers). Returns board name, change percent, leading stock, advance/decline counts, turnover.
+- **`market` command**: Whole-market breadth statistics — advancing/declining/flat counts, limit-up/down counts, and total turnover, aggregated across the Shanghai/Shenzhen/Beijing markets. Sourced from Eastmoney web endpoints (NOT Tencent); limit-up/down are best-effort and degrade to warnings when unavailable.
+- **HK & A-share index aliases**: Bare index names now resolve correctly — `hsi`→`hkHSI`, `hstech`→`hkHSTECH`, `hscei`→`hkHSCEI`, plus `csi300`/`hs300`/`chinext`/`star50`/`sse`/`szse`. Previously misread as US tickers.
+- **`doctor` command**: Probes every endpoint and reports connectivity and latency; exits 7 when any endpoint is unreachable.
+- **`context` command**: Prints runtime environment (version, Go/OS/arch), default format, command list, and per-endpoint configuration (env var + whether overridden).
+- **`--format json|text|raw`**: Unified global output flag. `json` is the default (stable, low-token, parseable); `text` is human-readable tables; `raw` is the unwrapped upstream payload.
+- **`--compact` / `--fields`**: Reduce token usage — `--compact` emits single-line JSON; `--fields a,b,c` restricts output to an ordered subset of top-level fields.
+- **New endpoint overrides**: `CNS_RANK_ENDPOINT`, `CNS_BREADTH_ENDPOINT`, `CNS_LIMITUP_ENDPOINT`, `CNS_LIMITDOWN_ENDPOINT`.
+
+### Changed
+
+- **Default output is now JSON** for all commands (agent-first). Use `--format text` for human-readable tables.
+- **`--json` is deprecated** but retained as a compatibility alias for `--format json`.
+
 ## [1.0.2] - 2026-05-06
 
 ### Fixed
@@ -59,6 +77,8 @@ Initial release of cnstock-cli.
 - **Data source disclaimer**: Endpoints are from Tencent Finance public web pages, NOT an official API. No SLA, no schema contract, no rate-limit policy. For personal/research use only.
 - **Non-affiliation**: Not an official Tencent product; data rights remain with their respective holders.
 
-[Unreleased]: https://github.com/fatecannotbealtered/cnstock-cli/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/fatecannotbealtered/cnstock-cli/compare/v1.0.3...HEAD
+[1.0.3]: https://github.com/fatecannotbealtered/cnstock-cli/compare/v1.0.2...v1.0.3
+[1.0.2]: https://github.com/fatecannotbealtered/cnstock-cli/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/fatecannotbealtered/cnstock-cli/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/fatecannotbealtered/cnstock-cli/releases/tag/v1.0.0

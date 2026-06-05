@@ -21,13 +21,23 @@ func init() {
 
 func runQuote(cmd *cobra.Command, args []string) error {
 	client := api.NewClient()
+
+	if outputFormat == "raw" {
+		raw, err := api.FetchQuoteRaw(cmd.Context(), client, args[0])
+		if err != nil {
+			return handleError(err)
+		}
+		output.Raw(raw)
+		return nil
+	}
+
 	quotes, err := api.FetchQuote(cmd.Context(), client, args[0])
 	if err != nil {
 		return handleError(err)
 	}
 
-	if jsonMode {
-		output.PrintJSON(quotes)
+	if outputFormat != "text" {
+		emitJSON(quotes)
 		return nil
 	}
 

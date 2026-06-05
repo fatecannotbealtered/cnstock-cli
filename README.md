@@ -46,10 +46,12 @@ See [SECURITY.md](SECURITY.md) for the full data source disclaimer.
 | ? **K-line History** | Daily/weekly/monthly with forward/backward/no adjustment |
 | ?? **Intraday Minutes** | All minute-level ticks for the current trading day |
 | ? **Name Search** | Chinese, pinyin, English — find any stock code |
-| ? **AI Friendly** | `--json`, `--quiet`, `reference` command for agent self-discovery |
+| ? **AI Friendly** | JSON by default, `--format`/`--compact`/`--fields`, `reference`/`context`/`doctor` for self-discovery |
 | ? **Single Binary** | Download and run; no runtime dependencies |
 | ? **Beautiful Output** | Colored tables with CJK character support |
 | ? **Multi-market** | A-shares (SH/SZ/BJ), HK stocks, US stocks, indices, funds/ETFs |
+| 📊 **Sectors & Breadth** | Industry/concept board ranking + whole-market advance/decline & limit-up/down |
+| 🩺 **Self-aware** | `doctor` (endpoint connectivity) and `context` (environment) commands |
 
 ## Project Structure
 
@@ -58,11 +60,16 @@ cnstock-cli/
 ├── cmd/
 │   ├── cnstock-cli/
 │   │   └── main.go                # Entry point
-│   ├── root.go                    # Root command + global flags (--json, --quiet)
+│   ├── root.go                    # Root command + global flags (--format, --compact, --fields)
 │   ├── quote.go                   # quote subcommand
 │   ├── kline.go                   # kline subcommand
 │   ├── minute.go                  # minute subcommand
 │   ├── search.go                  # search subcommand
+│   ├── sectors.go                 # sectors subcommand
+│   ├── market.go                  # market subcommand
+│   ├── doctor.go                  # doctor (endpoint health)
+│   ├── context.go                 # context (environment)
+│   ├── render.go                  # output format dispatch helper
 │   ├── reference.go               # reference (AI self-discovery)
 │   └── cmd_test.go                # CLI smoke tests
 ├── internal/
@@ -73,6 +80,9 @@ cnstock-cli/
 │   │   ├── kline.go               # K-line response parsing
 │   │   ├── minute.go              # Minute response parsing
 │   │   ├── search.go              # Search response parsing
+│   │   ├── sector.go              # Sector ranking parsing
+│   │   ├── market.go              # Market breadth aggregation (Eastmoney)
+│   │   ├── endpoints.go           # Endpoint metadata + probe targets
 │   │   ├── encoding.go            # UTF-8 / GB18030 decoding
 │   │   ├── types.go               # Shared data types
 │   │   ├── e2e_test.go            # API-level integration tests (httptest)
@@ -116,7 +126,7 @@ cnstock-cli/
 Copy the block below to your agent (or run it yourself):
 
 ```bash
-# Please install cnstock-cli and use it for all stock quotes and market data going forward (always pass --json).
+# Please install cnstock-cli and use it for all stock quotes and market data going forward (default output is JSON).
 # Install CLI
 npm install -g @fatecannotbealtered-/cnstock-cli
 
@@ -124,7 +134,7 @@ npm install -g @fatecannotbealtered-/cnstock-cli
 npx skills add fatecannotbealtered/cnstock-cli -y -g
 
 # Verify
-cnstock-cli quote sh600519 --json
+cnstock-cli quote sh600519
 ```
 
 ### Alternative: Go install
@@ -150,8 +160,8 @@ cnstock-cli quote sh600519
 # Batch query (comma-separated)
 cnstock-cli quote 600519,hk00700,usAAPL
 
-# JSON output
-cnstock-cli quote sh600519 --json
+# Human-readable table
+cnstock-cli quote sh600519 --format text
 ```
 
 Auto-detects market from symbol format:
@@ -169,8 +179,8 @@ cnstock-cli kline sh600519
 # Weekly, 50 bars, no adjustment
 cnstock-cli kline sh600519 --period week --limit 50 --adj none
 
-# JSON output
-cnstock-cli kline sh600519 --json
+# Human-readable table
+cnstock-cli kline sh600519 --format text
 ```
 
 | Flag | Default | Description |
@@ -183,7 +193,7 @@ cnstock-cli kline sh600519 --json
 
 ```bash
 cnstock-cli minute sh600519
-cnstock-cli minute sh600519 --json
+cnstock-cli minute sh600519 --format text
 ```
 
 ### Name Search
@@ -199,6 +209,46 @@ cnstock-cli search mt
 cnstock-cli search apple
 ```
 
+### Sector Ranking
+
+```bash
+# Top 10 industry gainers (default)
+cnstock-cli sectors
+
+# Top 5 concept-board losers
+cnstock-cli sectors --board gn --top 5 --direction down
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--board` | `hy` | `hy` (industry), `gn` (concept), `dy` (region) |
+| `--top` | `10` | Number of boards (1-50) |
+| `--direction` | `up` | `up` (top gainers), `down` (top losers) |
+
+### Market Statistics
+
+```bash
+cnstock-cli market
+```
+
+Whole-market breadth: advancing/declining/flat counts, limit-up/down counts, and total turnover, aggregated across Shanghai/Shenzhen/Beijing. **Sourced from Eastmoney web endpoints** (not Tencent); limit-up/down are best-effort and may be omitted on non-trading days.
+
+### Doctor
+
+```bash
+cnstock-cli doctor
+```
+
+Probes every endpoint and reports connectivity and latency. Exits `7` when any endpoint is unreachable — useful for an agent to assess environment health before relying on data.
+
+### Context
+
+```bash
+cnstock-cli context
+```
+
+Prints version, Go/OS/arch, default format, command list, and per-endpoint configuration (env var + whether overridden).
+
 ### Reference
 
 ```bash
@@ -211,14 +261,19 @@ Prints all commands, flags, JSON schemas, and error codes in structured markdown
 
 | Flag | Description |
 |------|-------------|
-| `--json` | Output as JSON (machine-readable) |
-| `--quiet` | Suppress non-JSON stdout output |
+| `--format` | Output format: `json` (default), `text`, `raw` |
+| `--compact` | Single-line JSON (lower token count) |
+| `--fields` | Restrict JSON output to an ordered subset of top-level fields |
+| `--quiet` | Suppress non-result stdout output |
+| `--json` | Deprecated alias for `--format json` |
 | `--version` | Print version |
 | `--help` | Print help |
 
+Output is JSON by default (stable, low-token, parseable). Results go to stdout; errors and progress go to stderr. Use `--format text` for human-readable tables.
+
 ## JSON Output
 
-All commands support `--json` for machine-readable output. Example:
+Output is JSON by default — no flag needed. Example:
 
 ```json
 {
@@ -245,6 +300,10 @@ For advanced use (testing, proxying, or self-hosted endpoints), the following en
 | `CNS_KLINE_ENDPOINT` | `https://web.ifzq.gtimg.cn/appstock/app/%s/get?param=%s` | K-line endpoint |
 | `CNS_MINUTE_ENDPOINT` | `https://web.ifzq.gtimg.cn/appstock/app/minute/query?code=%s` | Minute endpoint |
 | `CNS_SEARCH_ENDPOINT` | `https://smartbox.gtimg.cn/s3/?v=2&q=%s&t=all&c=1` | Search endpoint |
+| `CNS_RANK_ENDPOINT` | Tencent rank endpoint | Sector ranking endpoint |
+| `CNS_BREADTH_ENDPOINT` | Eastmoney `ulist.np` | Market advance/decline endpoint |
+| `CNS_LIMITUP_ENDPOINT` | Eastmoney ZT pool | Limit-up pool endpoint (must contain `%s` for date) |
+| `CNS_LIMITDOWN_ENDPOINT` | Eastmoney DT pool | Limit-down pool endpoint (must contain `%s` for date) |
 
 ## Error Codes
 

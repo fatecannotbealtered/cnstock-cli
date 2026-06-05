@@ -24,10 +24,17 @@ func runReference(cmd *cobra.Command, args []string) error {
 
 | Flag | Type | Description |
 |------|------|-------------|
-| --json | bool | Output result as JSON |
-| --quiet | bool | Suppress non-JSON stdout output |
+| --format | string | Output format: json (default), text, raw |
+| --compact | bool | Emit single-line JSON (lower token count) |
+| --fields | strings | Restrict JSON output to an ordered subset of top-level fields |
+| --quiet | bool | Suppress non-result stdout output |
+| --json | bool | Deprecated alias for --format json |
 | --version | bool | Print version |
 | --help | bool | Print help |
+
+Output contract: results go to stdout; errors/progress go to stderr.
+Default output is JSON (stable, low-token, parseable). Use --format text for
+human-readable tables, --format raw for the unwrapped upstream payload.
 
 ## Environment Variables
 
@@ -49,7 +56,7 @@ No environment variables needed for normal use. These override default endpoints
 ### quote - Real-time Quotes
 
 ` + "```" + `
-cnstock-cli quote <symbols> [--json]
+cnstock-cli quote <symbols>
 ` + "```" + `
 
 - Comma-separated codes, auto-detect market
@@ -61,7 +68,7 @@ cnstock-cli quote <symbols> [--json]
 ### kline - Historical K-line
 
 ` + "```" + `
-cnstock-cli kline <symbol> [--period day|week|month] [--limit N] [--adj qfq|hfq|none] [--json]
+cnstock-cli kline <symbol> [--period day|week|month] [--limit N] [--adj qfq|hfq|none]
 ` + "```" + `
 
 - Default: daily, 20 bars, forward-adjusted (qfq)
@@ -70,7 +77,7 @@ cnstock-cli kline <symbol> [--period day|week|month] [--limit N] [--adj qfq|hfq|
 ### minute - Intraday Minutes
 
 ` + "```" + `
-cnstock-cli minute <symbol> [--json]
+cnstock-cli minute <symbol>
 ` + "```" + `
 
 - Returns all minute-level ticks for the current trading day
@@ -79,7 +86,7 @@ cnstock-cli minute <symbol> [--json]
 ### search - Name Search
 
 ` + "```" + `
-cnstock-cli search <keyword> [--json]
+cnstock-cli search <keyword>
 ` + "```" + `
 
 - Supports Chinese (茅台), pinyin (mt), English (apple)
@@ -87,7 +94,7 @@ cnstock-cli search <keyword> [--json]
 ### sectors - Sector/Industry Ranking
 
 ` + "```" + `
-cnstock-cli sectors [--board hy|gn|dy] [--top N] [--direction up|down] [--json]
+cnstock-cli sectors [--board hy|gn|dy] [--top N] [--direction up|down]
 ` + "```" + `
 
 - ` + "`--board`" + `: hy=industry (default), gn=concept, dy=region
@@ -98,7 +105,7 @@ cnstock-cli sectors [--board hy|gn|dy] [--top N] [--direction up|down] [--json]
 ### market - Whole-market Statistics
 
 ` + "```" + `
-cnstock-cli market [--json]
+cnstock-cli market
 ` + "```" + `
 
 - Advancing/declining/flat counts, limit-up/down counts, total turnover
@@ -113,6 +120,25 @@ cnstock-cli reference
 ` + "```" + `
 
 - Prints this reference in structured markdown
+
+### doctor - Connectivity Health Check
+
+` + "```" + `
+cnstock-cli doctor
+` + "```" + `
+
+- Probes every endpoint and reports ok/latency_ms/error per endpoint
+- Exit code 7 when any endpoint is unreachable
+- Lets an agent assess environment health before relying on data commands
+
+### context - Environment Self-awareness
+
+` + "```" + `
+cnstock-cli context
+` + "```" + `
+
+- Prints version, Go/OS/arch, default format, command list, and per-endpoint
+  config (env var name + whether overridden)
 
 ## Error Codes
 

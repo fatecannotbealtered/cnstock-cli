@@ -22,13 +22,22 @@ func init() {
 func runSearch(cmd *cobra.Command, args []string) error {
 	client := api.NewClient()
 
+	if outputFormat == "raw" {
+		raw, err := api.FetchSearchRaw(cmd.Context(), client, args[0])
+		if err != nil {
+			return handleError(err)
+		}
+		output.Raw(raw)
+		return nil
+	}
+
 	results, err := api.FetchSearch(cmd.Context(), client, args[0])
 	if err != nil {
 		return handleError(err)
 	}
 
-	if jsonMode {
-		output.PrintJSON(results)
+	if outputFormat != "text" {
+		emitJSON(results)
 		return nil
 	}
 

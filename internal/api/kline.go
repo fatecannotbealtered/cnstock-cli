@@ -20,18 +20,40 @@ var validKlinePeriods = map[string]struct{}{
 
 // FetchKline fetches historical K-line data.
 func FetchKline(ctx context.Context, client *Client, symbol string, period string, limit int, adj string) ([]KlineBar, error) {
-	normalized, err := NormalizeSymbol(symbol)
+	reqURL, normalized, market, adjParam, err := klineURL(symbol, period, limit, adj)
 	if err != nil {
 		return nil, err
 	}
+	text, err := client.GetString(ctx, reqURL)
+	if err != nil {
+		return nil, err
+	}
+	return parseKlineResponse(text, normalized, market, period, adjParam)
+}
+
+// FetchKlineRaw returns the raw upstream K-line response.
+func FetchKlineRaw(ctx context.Context, client *Client, symbol string, period string, limit int, adj string) (string, error) {
+	reqURL, _, _, _, err := klineURL(symbol, period, limit, adj)
+	if err != nil {
+		return "", err
+	}
+	return client.GetString(ctx, reqURL)
+}
+
+// klineURL validates inputs and builds the K-line request URL.
+func klineURL(symbol, period string, limit int, adj string) (reqURL, normalized, market, adjParam string, err error) {
+	normalized, err = NormalizeSymbol(symbol)
+	if err != nil {
+		return "", "", "", "", err
+	}
 	if limit < 1 || limit > maxKlineLimit {
-		return nil, newValidationError("limit must be between 1 and %d", maxKlineLimit)
+		return "", "", "", "", newValidationError("limit must be between 1 and %d", maxKlineLimit)
 	}
 	if _, ok := validKlinePeriods[period]; !ok {
-		return nil, newValidationError("period only supports day, week, month")
+		return "", "", "", "", newValidationError("period only supports day, week, month")
 	}
 
-	market := DetectMarket(normalized)
+	market = DetectMarket(normalized)
 	path := "fqkline"
 	switch market {
 	case MarketHK:
@@ -40,20 +62,13 @@ func FetchKline(ctx context.Context, client *Client, symbol string, period strin
 		path = "usfqkline"
 	}
 
-	adjParam, err := NormalizeAdj(adj)
+	adjParam, err = NormalizeAdj(adj)
 	if err != nil {
-		return nil, err
+		return "", "", "", "", err
 	}
 
 	param := fmt.Sprintf("%s,%s,,,%d,%s", normalized, period, limit, adjParam)
-	reqURL := ResolveKlineURL(path, url.QueryEscape(param))
-
-	text, err := client.GetString(ctx, reqURL)
-	if err != nil {
-		return nil, err
-	}
-
-	return parseKlineResponse(text, normalized, market, period, adjParam)
+	return ResolveKlineURL(path, url.QueryEscape(param)), normalized, market, adjParam, nil
 }
 
 func parseKlineResponse(text string, symbol, market, period, adjParam string) ([]KlineBar, error) {

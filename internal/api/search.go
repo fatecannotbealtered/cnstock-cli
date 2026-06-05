@@ -12,18 +12,33 @@ var hintRe = regexp.MustCompile(`v_hint="(.*)"`)
 
 // FetchSearch searches for stocks by keyword (Chinese/pinyin/English).
 func FetchSearch(ctx context.Context, client *Client, keyword string) ([]SearchResult, error) {
-	keyword = strings.TrimSpace(keyword)
-	if keyword == "" {
-		return nil, newValidationError("search keyword cannot be empty")
+	reqURL, err := searchURL(keyword)
+	if err != nil {
+		return nil, err
 	}
-
-	reqURL := ResolveSearchURL(url.QueryEscape(keyword))
 	text, err := client.GetString(ctx, reqURL)
 	if err != nil {
 		return nil, err
 	}
-
 	return parseSearchResponse(text)
+}
+
+// FetchSearchRaw returns the raw upstream search response.
+func FetchSearchRaw(ctx context.Context, client *Client, keyword string) (string, error) {
+	reqURL, err := searchURL(keyword)
+	if err != nil {
+		return "", err
+	}
+	return client.GetString(ctx, reqURL)
+}
+
+// searchURL validates the keyword and builds the request URL.
+func searchURL(keyword string) (string, error) {
+	keyword = strings.TrimSpace(keyword)
+	if keyword == "" {
+		return "", newValidationError("search keyword cannot be empty")
+	}
+	return ResolveSearchURL(url.QueryEscape(keyword)), nil
 }
 
 var searchMarketMap = map[string]string{
