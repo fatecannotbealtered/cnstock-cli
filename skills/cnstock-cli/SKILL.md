@@ -11,7 +11,7 @@ Query financial data through Tencent Finance web endpoints. No API key required.
 > **IMPORTANT: This is NOT an official Tencent API.** The endpoints are observed from Tencent Finance public web pages. There is no official documentation, SLA, schema contract, or rate-limit policy. Use for personal lookup and research only — NOT for trading, commercial products, or compliance-sensitive workloads.
 
 ```bash
-# Please install cnstock-cli and use it for all stock quotes and market data going forward (always pass --json).
+# Please install cnstock-cli and use it for all stock quotes and market data going forward (default output is JSON).
 # Install CLI
 npm install -g @fatecannotbealtered-/cnstock-cli
 
@@ -19,7 +19,7 @@ npm install -g @fatecannotbealtered-/cnstock-cli
 npx skills add fatecannotbealtered/cnstock-cli -y -g
 
 # Verify
-cnstock-cli quote sh600519 --json
+cnstock-cli quote sh600519
 ```
 
 ## Activation
@@ -31,7 +31,7 @@ Use when the user asks about stock prices, market data, K-line history, intraday
 ### quote — Real-time Quotes
 
 ```bash
-cnstock-cli quote <symbols> [--json]
+cnstock-cli quote <symbols>
 ```
 
 - Comma-separated codes, auto-detect market:
@@ -39,12 +39,13 @@ cnstock-cli quote <symbols> [--json]
   - `00700`, `hk00700` → HK stock
   - `AAPL`, `usAAPL`, `usTSLA` → US stock
   - `sh000001`, `sz399001` → Index
+  - `hsi`, `hstech`, `hscei`, `csi300`, `chinext` → index aliases
 - Output: price, change, OHLCV, bid/ask depth (5 levels for A-shares), PE ratio, turnover
 
 ### kline — Historical K-line
 
 ```bash
-cnstock-cli kline <symbol> [--period day|week|month] [--limit N] [--adj qfq|hfq|none] [--json]
+cnstock-cli kline <symbol> [--period day|week|month] [--limit N] [--adj qfq|hfq|none]
 ```
 
 - Default: daily, 20 bars, forward-adjusted (qfq)
@@ -54,7 +55,7 @@ cnstock-cli kline <symbol> [--period day|week|month] [--limit N] [--adj qfq|hfq|
 ### minute — Intraday Minutes
 
 ```bash
-cnstock-cli minute <symbol> [--json]
+cnstock-cli minute <symbol>
 ```
 
 - Returns all minute-level ticks for the current trading day
@@ -63,11 +64,48 @@ cnstock-cli minute <symbol> [--json]
 ### search — Name Search
 
 ```bash
-cnstock-cli search <keyword> [--json]
+cnstock-cli search <keyword>
 ```
 
 - Supports Chinese (茅台), pinyin (mt), English (apple)
 - Returns matching stocks across all markets
+
+### sectors — Sector/Industry Ranking
+
+```bash
+cnstock-cli sectors [--board hy|gn|dy] [--top N] [--direction up|down]
+```
+
+- `--board`: hy=industry (default), gn=concept, dy=region
+- `--top`: 1-50 (default 10); `--direction`: up=top gainers (default), down=top losers
+- Output: board name, change percent, leading stock, advance/decline counts, turnover
+
+### market — Whole-market Statistics
+
+```bash
+cnstock-cli market
+```
+
+- Advancing/declining/flat counts, limit-up/down counts, total turnover
+- Aggregated across Shanghai/Shenzhen/Beijing; sourced from Eastmoney (NOT Tencent)
+- `limit_up`/`limit_down` are best-effort (may be omitted on non-trading days; see `warnings`)
+
+### doctor — Connectivity Health Check
+
+```bash
+cnstock-cli doctor
+```
+
+- Probes every endpoint, reports ok/latency_ms/error; exit 7 if any endpoint is down
+- Run this first to assess environment health before relying on data
+
+### context — Environment Self-awareness
+
+```bash
+cnstock-cli context
+```
+
+- Prints version, Go/OS/arch, default format, command list, and per-endpoint config
 
 ### reference — Self-description
 
@@ -79,8 +117,13 @@ cnstock-cli reference
 
 ## Global Flags
 
-- `--json` — Output as JSON (machine-readable)
-- `--quiet` — Suppress non-JSON stdout output
+- `--format json|text|raw` — Output format. `json` is the default (stable, low-token, parseable); `text` for human-readable tables; `raw` for the unwrapped upstream payload
+- `--compact` — Single-line JSON (lower token count)
+- `--fields a,b,c` — Restrict JSON output to an ordered subset of top-level fields
+- `--quiet` — Suppress non-result stdout output
+- `--json` — Deprecated alias for `--format json`
+
+Output contract: results go to stdout; errors and progress go to stderr.
 
 ## JSON Output Schemas
 
@@ -144,6 +187,39 @@ cnstock-cli reference
 }
 ```
 
+### Sector
+
+```json
+{
+  "code": "pt01801780",
+  "name": "银行",
+  "change_pct": 1.33,
+  "change": 51.98,
+  "price": 3954.25,
+  "turnover": 2568545,
+  "volume": 33244000,
+  "turnover_rate": 0.25,
+  "advance_decline": "41/42",
+  "leading_stock": {"code": "sh601988", "name": "中国银行", "change_pct": 2.54, "price": 6.05}
+}
+```
+
+### Market Statistics
+
+```json
+{
+  "advancing": 3321,
+  "declining": 2137,
+  "flat": 134,
+  "limit_up": 73,
+  "limit_down": 11,
+  "amount": 3101071870666.99,
+  "markets": [
+    {"name": "上证指数", "advancing": 1284, "declining": 1008, "flat": 60, "amount": 1363887868514.9}
+  ]
+}
+```
+
 ### Error Response
 
 ```json
@@ -184,6 +260,10 @@ No environment variables needed for normal use. These override default endpoints
 | `CNS_KLINE_ENDPOINT` | K-line endpoint URL |
 | `CNS_MINUTE_ENDPOINT` | Minute endpoint URL |
 | `CNS_SEARCH_ENDPOINT` | Search endpoint URL |
+| `CNS_RANK_ENDPOINT` | Sector ranking endpoint URL |
+| `CNS_BREADTH_ENDPOINT` | Market advance/decline endpoint URL (Eastmoney) |
+| `CNS_LIMITUP_ENDPOINT` | Limit-up pool endpoint URL (Eastmoney, must contain `%s` for date) |
+| `CNS_LIMITDOWN_ENDPOINT` | Limit-down pool endpoint URL (Eastmoney, must contain `%s` for date) |
 
 ## Common Symbols
 
@@ -192,7 +272,8 @@ See `symbols.json` in the same directory for a list of 71 common stock codes acr
 ## Notes
 
 - No API key is required
-- **NOT an official Tencent API** — endpoints are from public web pages, may change without notice
+- **NOT an official API** — endpoints are from public web pages, may change without notice
+- Most commands use Tencent Finance endpoints; `market` (advance/decline & limit-up/down) uses Eastmoney web endpoints
 - No formal SLA, schema contract, or rate-limit policy exists
 - The CLI follows redirects and decodes both UTF-8 and GB18030 responses
 - US stock K-line data may be sparse for recent dates

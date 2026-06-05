@@ -29,13 +29,22 @@ func runKline(cmd *cobra.Command, args []string) error {
 	limit, _ := cmd.Flags().GetInt("limit")
 	adj, _ := cmd.Flags().GetString("adj")
 
+	if outputFormat == "raw" {
+		raw, err := api.FetchKlineRaw(cmd.Context(), client, args[0], period, limit, adj)
+		if err != nil {
+			return handleError(err)
+		}
+		output.Raw(raw)
+		return nil
+	}
+
 	bars, err := api.FetchKline(cmd.Context(), client, args[0], period, limit, adj)
 	if err != nil {
 		return handleError(err)
 	}
 
-	if jsonMode {
-		output.PrintJSON(bars)
+	if outputFormat != "text" {
+		emitJSON(bars)
 		return nil
 	}
 

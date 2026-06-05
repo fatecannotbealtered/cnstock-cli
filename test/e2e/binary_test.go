@@ -430,6 +430,102 @@ func TestBinary_Reference(t *testing.T) {
 	}
 }
 
+func TestBinary_DefaultFormatIsJSON(t *testing.T) {
+	server := mockQuoteServer()
+	defer server.Close()
+
+	// No --json / --format flag: default output must be JSON.
+	r := runBinary(map[string]string{
+		"CNS_QUOTE_ENDPOINT": server.URL + "/q=%s",
+	}, "quote", "sh600519")
+
+	if r.ExitCode != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", r.ExitCode, r.Stderr)
+	}
+	var quotes []map[string]any
+	if err := json.Unmarshal([]byte(r.Stdout), &quotes); err != nil {
+		t.Fatalf("default output is not JSON: %v\nstdout: %s", err, r.Stdout)
+	}
+}
+
+func TestBinary_FieldsAndCompact(t *testing.T) {
+	server := mockQuoteServer()
+	defer server.Close()
+
+	r := runBinary(map[string]string{
+		"CNS_QUOTE_ENDPOINT": server.URL + "/q=%s",
+	}, "quote", "sh600519", "--compact", "--fields", "symbol,price")
+
+	if r.ExitCode != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", r.ExitCode, r.Stderr)
+	}
+	out := strings.TrimSpace(r.Stdout)
+	if strings.Contains(out, "\n") {
+		t.Errorf("--compact output should be single-line, got: %s", out)
+	}
+	var quotes []map[string]any
+	if err := json.Unmarshal([]byte(out), &quotes); err != nil {
+		t.Fatalf("invalid JSON: %v\nstdout: %s", err, out)
+	}
+	if len(quotes) != 1 {
+		t.Fatalf("expected 1 quote, got %d", len(quotes))
+	}
+	if _, ok := quotes[0]["symbol"]; !ok {
+		t.Error("expected 'symbol' field to be present")
+	}
+	if _, ok := quotes[0]["name"]; ok {
+		t.Error("'name' should be filtered out by --fields")
+	}
+}
+
+func TestBinary_FormatText(t *testing.T) {
+	server := mockQuoteServer()
+	defer server.Close()
+
+	r := runBinary(map[string]string{
+		"CNS_QUOTE_ENDPOINT": server.URL + "/q=%s",
+	}, "quote", "sh600519", "--format", "text")
+
+	if r.ExitCode != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", r.ExitCode, r.Stderr)
+	}
+	if json.Valid([]byte(strings.TrimSpace(r.Stdout))) {
+		t.Errorf("text output should not be valid JSON: %s", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "贵州茅台") {
+		t.Errorf("text output should contain the stock name, got: %s", r.Stdout)
+	}
+}
+
+func TestBinary_InvalidFormat(t *testing.T) {
+	r := runBinary(nil, "quote", "sh600519", "--format", "yaml")
+
+	if r.ExitCode != 2 {
+		t.Errorf("exit code = %d, want 2; stderr: %s", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stderr, "VALIDATION_ERROR") {
+		t.Errorf("stderr should contain VALIDATION_ERROR, got: %s", r.Stderr)
+	}
+}
+
+func TestBinary_Context(t *testing.T) {
+	r := runBinary(nil, "context")
+
+	if r.ExitCode != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", r.ExitCode, r.Stderr)
+	}
+	var ctx map[string]any
+	if err := json.Unmarshal([]byte(r.Stdout), &ctx); err != nil {
+		t.Fatalf("context output is not JSON: %v\nstdout: %s", err, r.Stdout)
+	}
+	if ctx["default_format"] != "json" {
+		t.Errorf("default_format = %v, want json", ctx["default_format"])
+	}
+	if _, ok := ctx["endpoints"]; !ok {
+		t.Error("context should include 'endpoints'")
+	}
+}
+
 func TestBinary_QuietMode(t *testing.T) {
 	server := mockQuoteServer()
 	defer server.Close()

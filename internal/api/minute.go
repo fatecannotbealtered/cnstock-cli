@@ -9,18 +9,33 @@ import (
 
 // FetchMinute fetches intraday minute-level data.
 func FetchMinute(ctx context.Context, client *Client, symbol string) ([]MinuteTick, error) {
-	normalized, err := NormalizeSymbol(symbol)
+	reqURL, normalized, err := minuteURL(symbol)
 	if err != nil {
 		return nil, err
 	}
-
-	reqURL := ResolveMinuteURL(normalized)
 	text, err := client.GetString(ctx, reqURL)
 	if err != nil {
 		return nil, err
 	}
-
 	return parseMinuteResponse(text, normalized)
+}
+
+// FetchMinuteRaw returns the raw upstream minute response.
+func FetchMinuteRaw(ctx context.Context, client *Client, symbol string) (string, error) {
+	reqURL, _, err := minuteURL(symbol)
+	if err != nil {
+		return "", err
+	}
+	return client.GetString(ctx, reqURL)
+}
+
+// minuteURL normalizes the symbol and builds the request URL.
+func minuteURL(symbol string) (string, string, error) {
+	normalized, err := NormalizeSymbol(symbol)
+	if err != nil {
+		return "", "", err
+	}
+	return ResolveMinuteURL(normalized), normalized, nil
 }
 
 func parseMinuteResponse(text string, symbol string) ([]MinuteTick, error) {

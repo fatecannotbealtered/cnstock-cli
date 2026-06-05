@@ -20,13 +20,22 @@ func init() {
 func runMarket(cmd *cobra.Command, args []string) error {
 	client := api.NewClient()
 
+	if outputFormat == "raw" {
+		raw, err := api.FetchMarketStatsRaw(cmd.Context(), client)
+		if err != nil {
+			return handleError(err)
+		}
+		output.Raw(raw)
+		return nil
+	}
+
 	stats, err := api.FetchMarketStats(cmd.Context(), client)
 	if err != nil {
 		return handleError(err)
 	}
 
-	if jsonMode {
-		output.PrintJSON(stats)
+	if outputFormat != "text" {
+		emitJSON(stats)
 		return nil
 	}
 

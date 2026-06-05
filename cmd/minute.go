@@ -22,13 +22,22 @@ func init() {
 func runMinute(cmd *cobra.Command, args []string) error {
 	client := api.NewClient()
 
+	if outputFormat == "raw" {
+		raw, err := api.FetchMinuteRaw(cmd.Context(), client, args[0])
+		if err != nil {
+			return handleError(err)
+		}
+		output.Raw(raw)
+		return nil
+	}
+
 	ticks, err := api.FetchMinute(cmd.Context(), client, args[0])
 	if err != nil {
 		return handleError(err)
 	}
 
-	if jsonMode {
-		output.PrintJSON(ticks)
+	if outputFormat != "text" {
+		emitJSON(ticks)
 		return nil
 	}
 

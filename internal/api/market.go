@@ -38,6 +38,12 @@ func FetchMarketStats(ctx context.Context, client *Client) (*MarketStats, error)
 	return stats, nil
 }
 
+// FetchMarketStatsRaw returns the raw upstream market-breadth response
+// (the advance/decline payload; limit-up/down pools are omitted in raw mode).
+func FetchMarketStatsRaw(ctx context.Context, client *Client) (string, error) {
+	return client.GetString(ctx, ResolveBreadthURL())
+}
+
 func parseBreadthResponse(text string) (*MarketStats, error) {
 	var resp struct {
 		Rc   int `json:"rc"`

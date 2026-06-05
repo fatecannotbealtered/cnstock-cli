@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"strings"
 
 	"github.com/fatecannotbealtered/cnstock-cli/internal/api"
 	"github.com/fatecannotbealtered/cnstock-cli/internal/output"
@@ -49,11 +50,26 @@ var ErrSilent = errors.New("")
 // version is injected by goreleaser ldflags.
 var version = "dev"
 
-// jsonMode is the global --json flag.
-var jsonMode bool
+// Output control (global flags).
+var (
+	// outputFormat is the resolved output format: "json" (default), "text", or "raw".
+	outputFormat = "json"
+	// jsonMode is the deprecated --json flag, kept as an alias for --format json.
+	jsonMode bool
+	// compactMode emits single-line JSON (lower token count).
+	compactMode bool
+	// fieldsList restricts JSON output to an ordered subset of top-level fields.
+	fieldsList []string
+	// quietMode suppresses non-result stdout output.
+	quietMode bool
+)
 
-// quietMode is the global --quiet flag.
-var quietMode bool
+// validFormats enumerates accepted --format values.
+var validFormats = map[string]struct{}{
+	"json": {},
+	"text": {},
+	"raw":  {},
+}
 
 // lastExit tracks the exit code for the current command execution.
 var lastExit int
@@ -89,8 +105,26 @@ func init() {
 	api.UserAgent = fmt.Sprintf("cnstock-cli/%s (+https://github.com/fatecannotbealtered/cnstock-cli)", version)
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 
-	rootCmd.PersistentFlags().BoolVar(&jsonMode, "json", false, "Output result as JSON")
-	rootCmd.PersistentFlags().BoolVar(&quietMode, "quiet", false, "Suppress non-JSON stdout output")
+	rootCmd.PersistentFlags().StringVar(&outputFormat, "format", "json", "Output format: json|text|raw")
+	rootCmd.PersistentFlags().BoolVar(&compactMode, "compact", false, "Emit single-line JSON (lower token count)")
+	rootCmd.PersistentFlags().StringSliceVar(&fieldsList, "fields", nil, "Restrict JSON output to these top-level fields (ordered, comma-separated)")
+	rootCmd.PersistentFlags().BoolVar(&jsonMode, "json", false, "Deprecated alias for --format json")
+	rootCmd.PersistentFlags().BoolVar(&quietMode, "quiet", false, "Suppress non-result stdout output")
+	_ = rootCmd.PersistentFlags().MarkDeprecated("json", "use --format json (json is the default)")
+
+	// Resolve and validate output flags before any command runs.
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		// --json is a compatibility alias that forces JSON output.
+		if cmd.Flags().Changed("json") {
+			outputFormat = "json"
+		}
+		outputFormat = strings.ToLower(strings.TrimSpace(outputFormat))
+		if _, ok := validFormats[outputFormat]; !ok {
+			return handleError(api.NewValidationError("format only supports json, text, raw"))
+		}
+		output.Quiet = quietMode
+		return nil
+	}
 
 	cobra.OnInitialize(func() {
 		output.Quiet = quietMode
@@ -107,14 +141,16 @@ func Execute() error {
 	return rootCmd.Execute()
 }
 
-// handleError handles errors with JSON mode support.
+// handleError emits an error in the active output format and sets the exit code.
+// In text mode it prints a human-readable line to stderr; otherwise it emits a
+// machine-readable JSON error envelope to stderr.
 func handleError(err error) error {
 	msg := err.Error()
 	code, exitCode := classifyError(err)
-	if jsonMode {
-		output.PrintErrorJSONWithCode(msg, 0, code)
-	} else {
+	if outputFormat == "text" {
 		output.Error(msg)
+	} else {
+		output.PrintErrorJSONWithCode(msg, 0, code)
 	}
 	setExitCode(exitCode)
 	return ErrSilent

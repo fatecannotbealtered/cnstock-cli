@@ -13,19 +13,33 @@ var quoteLineRe = regexp.MustCompile(`v_(\w+)="(.*)"`)
 
 // FetchQuote fetches real-time quotes for comma-separated symbols.
 func FetchQuote(ctx context.Context, client *Client, symbols string) ([]Quote, error) {
-	normalized, err := NormalizeSymbols(symbols)
+	url, normalized, err := quoteURL(symbols)
 	if err != nil {
 		return nil, err
 	}
-
-	url := ResolveQuoteURL(strings.Join(normalized, ","))
 	text, err := client.GetString(ctx, url)
 	if err != nil {
 		return nil, err
 	}
+	return parseQuoteResponse(text, normalized), nil
+}
 
-	results := parseQuoteResponse(text, normalized)
-	return results, nil
+// FetchQuoteRaw returns the raw upstream quote response.
+func FetchQuoteRaw(ctx context.Context, client *Client, symbols string) (string, error) {
+	url, _, err := quoteURL(symbols)
+	if err != nil {
+		return "", err
+	}
+	return client.GetString(ctx, url)
+}
+
+// quoteURL normalizes the symbols and builds the request URL.
+func quoteURL(symbols string) (string, []string, error) {
+	normalized, err := NormalizeSymbols(symbols)
+	if err != nil {
+		return "", nil, err
+	}
+	return ResolveQuoteURL(strings.Join(normalized, ",")), normalized, nil
 }
 
 func parseQuoteResponse(text string, normalized []string) []Quote {

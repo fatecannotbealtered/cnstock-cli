@@ -1,9 +1,11 @@
 package output
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // PrintJSON outputs v as indented JSON to stdout.
@@ -14,6 +16,87 @@ func PrintJSON(v any) {
 		return
 	}
 	fmt.Println(string(data))
+}
+
+// RenderJSON outputs v as JSON to stdout, optionally filtering to an ordered set
+// of top-level fields and/or emitting compact single-line output.
+//
+// Field filtering keeps only the requested keys, in the order given, which keeps
+// the output stable and low-token for agent consumption. It applies to a single
+// object or to each element of an array of objects.
+func RenderJSON(v any, fields []string, compact bool) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "json marshal error: %v\n", err)
+		return
+	}
+	if len(fields) > 0 {
+		data = filterFields(data, fields)
+	}
+	if !compact {
+		var buf bytes.Buffer
+		if err := json.Indent(&buf, data, "", "  "); err == nil {
+			data = buf.Bytes()
+		}
+	}
+	fmt.Println(string(data))
+}
+
+// Raw writes s to stdout verbatim (no wrapping, no trailing formatting beyond a newline).
+func Raw(s string) {
+	fmt.Println(s)
+}
+
+// filterFields keeps only the requested keys (in the given order) from a JSON
+// object or array-of-objects. On any structural mismatch it returns data unchanged.
+func filterFields(data []byte, fields []string) []byte {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 {
+		return data
+	}
+	switch trimmed[0] {
+	case '[':
+		var arr []json.RawMessage
+		if err := json.Unmarshal(trimmed, &arr); err != nil {
+			return data
+		}
+		parts := make([]string, 0, len(arr))
+		for _, el := range arr {
+			parts = append(parts, string(filterObject(el, fields)))
+		}
+		return []byte("[" + strings.Join(parts, ",") + "]")
+	case '{':
+		return filterObject(trimmed, fields)
+	default:
+		return data
+	}
+}
+
+// filterObject keeps only the requested keys, in order, from a single JSON object.
+func filterObject(obj json.RawMessage, fields []string) []byte {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(obj, &m); err != nil {
+		return obj
+	}
+	var b bytes.Buffer
+	b.WriteByte('{')
+	first := true
+	for _, f := range fields {
+		raw, ok := m[f]
+		if !ok {
+			continue
+		}
+		if !first {
+			b.WriteByte(',')
+		}
+		first = false
+		key, _ := json.Marshal(f)
+		b.Write(key)
+		b.WriteByte(':')
+		b.Write(raw)
+	}
+	b.WriteByte('}')
+	return b.Bytes()
 }
 
 // ErrorCode classifies errors for machine consumption.

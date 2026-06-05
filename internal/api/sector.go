@@ -22,11 +22,38 @@ var validBoardTypes = map[string]struct{}{
 // upstream direct=down returns gainers (descending), direct=up returns losers
 // (ascending) — so we translate here to keep the CLI semantics natural.
 func FetchSectors(ctx context.Context, client *Client, boardType, direction string, count int) ([]Sector, error) {
+	reqURL, err := sectorURL(boardType, direction, count)
+	if err != nil {
+		return nil, err
+	}
+	text, err := client.GetString(ctx, reqURL)
+	if err != nil {
+		return nil, err
+	}
+	return parseSectorResponse(text)
+}
+
+// FetchSectorsRaw returns the raw upstream sector-ranking response.
+func FetchSectorsRaw(ctx context.Context, client *Client, boardType, direction string, count int) (string, error) {
+	reqURL, err := sectorURL(boardType, direction, count)
+	if err != nil {
+		return "", err
+	}
+	return client.GetString(ctx, reqURL)
+}
+
+// sectorURL validates inputs and builds the ranking request URL.
+//
+// direction is the user-facing intent: "up" = top gainers, "down" = top losers.
+// NOTE: the upstream `direct` parameter is inverted relative to intuition —
+// upstream direct=down returns gainers (descending), direct=up returns losers
+// (ascending) — so we translate here to keep the CLI semantics natural.
+func sectorURL(boardType, direction string, count int) (string, error) {
 	if _, ok := validBoardTypes[boardType]; !ok {
-		return nil, newValidationError("board only supports hy (industry), gn (concept), dy (region)")
+		return "", newValidationError("board only supports hy (industry), gn (concept), dy (region)")
 	}
 	if count < 1 || count > maxSectorCount {
-		return nil, newValidationError("top must be between 1 and %d", maxSectorCount)
+		return "", newValidationError("top must be between 1 and %d", maxSectorCount)
 	}
 
 	var direct string
@@ -36,15 +63,9 @@ func FetchSectors(ctx context.Context, client *Client, boardType, direction stri
 	case "down", "losers":
 		direct = "up" // upstream: ascending by change -> losers first
 	default:
-		return nil, newValidationError("direction only supports up (gainers) or down (losers)")
+		return "", newValidationError("direction only supports up (gainers) or down (losers)")
 	}
-
-	reqURL := ResolveRankURL(boardType, direct, count)
-	text, err := client.GetString(ctx, reqURL)
-	if err != nil {
-		return nil, err
-	}
-	return parseSectorResponse(text)
+	return ResolveRankURL(boardType, direct, count), nil
 }
 
 func parseSectorResponse(text string) ([]Sector, error) {

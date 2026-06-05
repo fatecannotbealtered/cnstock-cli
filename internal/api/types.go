@@ -35,6 +35,11 @@ func newValidationError(format string, args ...any) error {
 	return &ValidationError{Msg: fmt.Sprintf(format, args...)}
 }
 
+// NewValidationError creates a ValidationError (exported for use by the cmd layer).
+func NewValidationError(format string, args ...any) error {
+	return &ValidationError{Msg: fmt.Sprintf(format, args...)}
+}
+
 // newServerError creates a ServerError.
 func newServerError(format string, args ...any) error {
 	return &ServerError{Msg: fmt.Sprintf(format, args...)}
