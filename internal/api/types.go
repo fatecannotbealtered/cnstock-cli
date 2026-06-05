@@ -114,3 +114,48 @@ type SearchResult struct {
 	Market string `json:"market"`
 	Pinyin string `json:"pinyin"`
 }
+
+// LeadingStock is the best-performing constituent of a sector (领涨股).
+type LeadingStock struct {
+	Code      string   `json:"code,omitempty"`
+	Name      string   `json:"name,omitempty"`
+	ChangePct *float64 `json:"change_pct,omitempty"`
+	Price     *float64 `json:"price,omitempty"`
+}
+
+// Sector represents one industry/concept board ranking row.
+type Sector struct {
+	Code           string        `json:"code"`
+	Name           string        `json:"name"`
+	ChangePct      *float64      `json:"change_pct,omitempty"`
+	Change         *float64      `json:"change,omitempty"`
+	Price          *float64      `json:"price,omitempty"`
+	Turnover       *float64      `json:"turnover,omitempty"`        // 成交额
+	Volume         *float64      `json:"volume,omitempty"`          // 成交量
+	TurnoverRate   *float64      `json:"turnover_rate,omitempty"`   // 换手率
+	AdvanceDecline string        `json:"advance_decline,omitempty"` // 板块内涨跌家数, e.g. "190/481"
+	LeadingStock   *LeadingStock `json:"leading_stock,omitempty"`
+}
+
+// MarketBreadth is the advance/decline breakdown for a single exchange.
+type MarketBreadth struct {
+	Name      string   `json:"name"`
+	Advancing int      `json:"advancing"`
+	Declining int      `json:"declining"`
+	Flat      int      `json:"flat"`
+	Amount    *float64 `json:"amount,omitempty"`
+}
+
+// MarketStats aggregates whole-market breadth statistics.
+// LimitUp/LimitDown are best-effort and may be nil when the upstream pool is
+// unavailable (e.g. non-trading day or pre-open); see Warnings.
+type MarketStats struct {
+	Advancing *int            `json:"advancing,omitempty"`
+	Declining *int            `json:"declining,omitempty"`
+	Flat      *int            `json:"flat,omitempty"`
+	LimitUp   *int            `json:"limit_up,omitempty"`
+	LimitDown *int            `json:"limit_down,omitempty"`
+	Amount    *float64        `json:"amount,omitempty"` // total turnover across markets (yuan)
+	Markets   []MarketBreadth `json:"markets,omitempty"`
+	Warnings  []string        `json:"warnings,omitempty"`
+}

@@ -26,6 +26,26 @@ var MarketName = map[string]string{
 	MarketUS: "美股",
 }
 
+// indexAlias maps friendly index aliases to their Tencent quote codes.
+// Without this, bare words like "hsi" would be misread as US tickers ("usHSI").
+// Keys must be lowercase; lookups are case-insensitive.
+var indexAlias = map[string]string{
+	// Hong Kong indices
+	"hsi":      "hkHSI",    // 恒生指数 Hang Seng Index
+	"hstech":   "hkHSTECH", // 恒生科技指数 Hang Seng TECH Index
+	"hstec":    "hkHSTECH", // alias
+	"hscei":    "hkHSCEI",  // 恒生中国企业指数 Hang Seng China Enterprises
+	"hsce":     "hkHSCEI",  // alias
+	"hangseng": "hkHSI",    // alias
+	// A-share indices
+	"sse":     "sh000001", // 上证指数 Shanghai Composite
+	"szse":    "sz399001", // 深证成指 Shenzhen Component
+	"chinext": "sz399006", // 创业板指 ChiNext
+	"star50":  "sh000688", // 科创50 STAR 50
+	"csi300":  "sh000300", // 沪深300 CSI 300
+	"hs300":   "sh000300", // alias
+}
+
 // DetectMarket identifies the market from a Tencent symbol prefix.
 // `bj` (Beijing Stock Exchange) is grouped under MarketCN for display purposes.
 func DetectMarket(symbol string) string {
@@ -51,6 +71,12 @@ func NormalizeSymbol(symbol string) (string, error) {
 
 	s := strings.ReplaceAll(raw, " ", "")
 	lower := strings.ToLower(s)
+
+	// Friendly index aliases (e.g. "hsi" -> "hkHSI") take precedence so they are not
+	// misclassified as US tickers by the generic ticker rule below.
+	if code, ok := indexAlias[lower]; ok {
+		return code, nil
+	}
 
 	if strings.HasPrefix(lower, "sh") || strings.HasPrefix(lower, "sz") || strings.HasPrefix(lower, "bj") || strings.HasPrefix(lower, "hk") {
 		return lower, nil
