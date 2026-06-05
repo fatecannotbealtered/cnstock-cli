@@ -27,3 +27,19 @@ func formatLargeNum(f *float64) string {
 		return fmt.Sprintf("%.0f", v)
 	}
 }
+
+// formatPct renders a float pointer as a signed percentage, or "-" when nil.
+func formatPct(f *float64) string {
+	if f == nil {
+		return "-"
+	}
+	return fmt.Sprintf("%+.2f%%", *f)
+}
+
+// formatInt renders an int pointer, or "-" when nil.
+func formatInt(i *int) string {
+	if i == nil {
+		return "-"
+	}
+	return fmt.Sprintf("%d", *i)
+}

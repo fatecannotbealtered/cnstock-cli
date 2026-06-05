@@ -26,6 +26,15 @@ const (
 	KlineEndpoint  = "https://web.ifzq.gtimg.cn/appstock/app/%s/get?param=%s"
 	MinuteEndpoint = "https://web.ifzq.gtimg.cn/appstock/app/minute/query?code=%s"
 	SearchEndpoint = "https://smartbox.gtimg.cn/s3/?v=2&q=%s&t=all&c=1"
+	// RankEndpoint returns sector/industry ranking (Tencent). Verbs: board_type, direct, count.
+	RankEndpoint = "https://proxy.finance.qq.com/cgi/cgi-bin/rank/pt/getRank?board_type=%s&sort_type=priceChange&direct=%s&offset=0&count=%d"
+	// BreadthEndpoint returns market advance/decline counts (Eastmoney, NOT Tencent).
+	// f104=advancing, f105=declining, f106=flat, f6=turnover; summed across the three
+	// composite indices to cover the whole market (Shanghai/Shenzhen/Beijing).
+	BreadthEndpoint = "https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&secids=1.000001,0.399106,0.899050&fields=f3,f14,f104,f105,f106,f6"
+	// LimitUpEndpoint / LimitDownEndpoint return limit-up/down pools (Eastmoney). Verb: date (YYYYMMDD).
+	LimitUpEndpoint   = "https://push2ex.eastmoney.com/getTopicZTPool?ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.ztzt&Pageindex=0&pagesize=1&sort=fbt:asc&date=%s"
+	LimitDownEndpoint = "https://push2ex.eastmoney.com/getTopicDTPool?ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.ztzt&Pageindex=0&pagesize=1&sort=fund:asc&date=%s"
 )
 
 // Client is the HTTP client for Tencent Finance endpoints.
@@ -76,6 +85,26 @@ func ResolveMinuteURL(symbol string) string {
 // ResolveSearchURL builds the full search request URL.
 func ResolveSearchURL(keyword string) string {
 	return fmt.Sprintf(resolveEndpoint("CNS_SEARCH_ENDPOINT", SearchEndpoint), keyword)
+}
+
+// ResolveRankURL builds the full sector-ranking request URL.
+func ResolveRankURL(boardType, direct string, count int) string {
+	return fmt.Sprintf(resolveEndpoint("CNS_RANK_ENDPOINT", RankEndpoint), boardType, direct, count)
+}
+
+// ResolveBreadthURL builds the full market-breadth request URL.
+func ResolveBreadthURL() string {
+	return resolveEndpoint("CNS_BREADTH_ENDPOINT", BreadthEndpoint)
+}
+
+// ResolveLimitUpURL builds the limit-up pool request URL for the given date (YYYYMMDD).
+func ResolveLimitUpURL(date string) string {
+	return fmt.Sprintf(resolveEndpoint("CNS_LIMITUP_ENDPOINT", LimitUpEndpoint), date)
+}
+
+// ResolveLimitDownURL builds the limit-down pool request URL for the given date (YYYYMMDD).
+func ResolveLimitDownURL(date string) string {
+	return fmt.Sprintf(resolveEndpoint("CNS_LIMITDOWN_ENDPOINT", LimitDownEndpoint), date)
 }
 
 // Get performs an HTTP GET request and returns the response body as bytes.

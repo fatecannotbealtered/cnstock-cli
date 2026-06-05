@@ -39,6 +39,10 @@ No environment variables needed for normal use. These override default endpoints
 | CNS_KLINE_ENDPOINT | K-line endpoint URL |
 | CNS_MINUTE_ENDPOINT | Minute endpoint URL |
 | CNS_SEARCH_ENDPOINT | Search endpoint URL |
+| CNS_RANK_ENDPOINT | Sector ranking endpoint URL |
+| CNS_BREADTH_ENDPOINT | Market advance/decline endpoint URL |
+| CNS_LIMITUP_ENDPOINT | Limit-up pool endpoint URL (must contain %s for date) |
+| CNS_LIMITDOWN_ENDPOINT | Limit-down pool endpoint URL (must contain %s for date) |
 
 ## Commands
 
@@ -79,6 +83,28 @@ cnstock-cli search <keyword> [--json]
 ` + "```" + `
 
 - Supports Chinese (茅台), pinyin (mt), English (apple)
+
+### sectors - Sector/Industry Ranking
+
+` + "```" + `
+cnstock-cli sectors [--board hy|gn|dy] [--top N] [--direction up|down] [--json]
+` + "```" + `
+
+- ` + "`--board`" + `: hy=industry (default), gn=concept, dy=region
+- ` + "`--top`" + `: number of sectors, 1-50 (default 10)
+- ` + "`--direction`" + `: up=top gainers (default), down=top losers
+- Source: Tencent Finance ranking endpoint
+
+### market - Whole-market Statistics
+
+` + "```" + `
+cnstock-cli market [--json]
+` + "```" + `
+
+- Advancing/declining/flat counts, limit-up/down counts, total turnover
+- Aggregated across Shanghai/Shenzhen/Beijing markets
+- Source: Eastmoney web endpoints (NOT Tencent)
+- limit_up/limit_down are best-effort and may be omitted on non-trading days (see warnings)
 
 ### reference - Self-description
 
@@ -167,6 +193,45 @@ cnstock-cli reference
   "name": "贵州茅台",
   "market": "A股（沪）",
   "pinyin": "GZMT"
+}
+` + "```" + `
+
+### Sector
+
+` + "```json" + `
+{
+  "code": "pt01801780",
+  "name": "银行",
+  "change_pct": 1.33,
+  "change": 51.98,
+  "price": 3954.25,
+  "turnover": 2568545,
+  "volume": 33244000,
+  "turnover_rate": 0.25,
+  "advance_decline": "41/42",
+  "leading_stock": {
+    "code": "sh601988",
+    "name": "中国银行",
+    "change_pct": 2.54,
+    "price": 6.05
+  }
+}
+` + "```" + `
+
+### Market Statistics
+
+` + "```json" + `
+{
+  "advancing": 3321,
+  "declining": 2137,
+  "flat": 134,
+  "limit_up": 73,
+  "limit_down": 11,
+  "amount": 3101071870666.99,
+  "markets": [
+    {"name": "上证指数", "advancing": 1284, "declining": 1008, "flat": 60, "amount": 1363887868514.9}
+  ],
+  "warnings": []
 }
 ` + "```" + `
 

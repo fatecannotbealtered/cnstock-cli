@@ -46,6 +46,11 @@ func TestNormalizeSymbol(t *testing.T) {
 		{"USMSFT", "usMSFT"},
 		{"TSLA", "usTSLA"},
 		{"BRK.B", "usBRK.B"}, // 美股带点代码
+		{"hsi", "hkHSI"},     // 港股指数别名
+		{"HSI", "hkHSI"},     // 大小写不敏感
+		{"hstech", "hkHSTECH"},
+		{"hscei", "hkHSCEI"},
+		{"csi300", "sh000300"}, // A 股指数别名
 	}
 	for _, tt := range tests {
 		got, err := NormalizeSymbol(tt.input)
