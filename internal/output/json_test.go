@@ -117,7 +117,7 @@ func TestHintForCode(t *testing.T) {
 		want string
 	}{
 		{ErrValidation, "Check command arguments and flags"},
-		{ErrNetwork, "Check network connectivity and try again"},
+		{ErrNetwork, "Check network connectivity; for HTTP 5xx, the upstream provider may be unavailable, retry later"},
 		{ErrServer, "Upstream server returned an error; try again later"},
 		{ErrNotFound, "Symbol or resource not found; verify the input"},
 		{ErrUnknown, ""},

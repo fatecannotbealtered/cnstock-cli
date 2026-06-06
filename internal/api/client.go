@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 )
@@ -13,7 +14,8 @@ const (
 	defaultTimeout    = 10 * time.Second
 	defaultMaxRetries = 2 // total of 3 attempts (1 initial + 2 retries)
 	retryBackoff      = 250 * time.Millisecond
-	referer           = "https://finance.qq.com" // upstream may reject requests without Referer
+	tencentReferer    = "https://finance.qq.com"
+	eastmoneyReferer  = "https://quote.eastmoney.com"
 )
 
 // UserAgent is the User-Agent header sent with every request.
@@ -31,7 +33,7 @@ const (
 	// BreadthEndpoint returns market advance/decline counts (Eastmoney, NOT Tencent).
 	// f104=advancing, f105=declining, f106=flat, f6=turnover; summed across the three
 	// composite indices to cover the whole market (Shanghai/Shenzhen/Beijing).
-	BreadthEndpoint = "https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&secids=1.000001,0.399106,0.899050&fields=f3,f14,f104,f105,f106,f6"
+	BreadthEndpoint = "https://push2.eastmoney.com/webguest/api/qt/ulist.np/get?timil=1&np=1&fltt=2&invt=2&ut=fa5fd1943c7b386f172d6893dbfba10b&dect=1&intv=2&secids=1.000001,0.399106,0.899050&fields=f3,f14,f104,f105,f106,f6"
 	// LimitUpEndpoint / LimitDownEndpoint return limit-up/down pools (Eastmoney). Verb: date (YYYYMMDD).
 	LimitUpEndpoint   = "https://push2ex.eastmoney.com/getTopicZTPool?ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.ztzt&Pageindex=0&pagesize=1&sort=fbt:asc&date=%s"
 	LimitDownEndpoint = "https://push2ex.eastmoney.com/getTopicDTPool?ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.ztzt&Pageindex=0&pagesize=1&sort=fund:asc&date=%s"
@@ -137,7 +139,7 @@ func (c *Client) doOnce(ctx context.Context, url string) ([]byte, bool, error) {
 	if err != nil {
 		return nil, false, newNetworkError("creating request: %v", err)
 	}
-	req.Header.Set("Referer", referer)
+	req.Header.Set("Referer", refererForURL(url))
 	req.Header.Set("User-Agent", UserAgent)
 
 	resp, err := c.http.Do(req)
@@ -158,6 +160,19 @@ func (c *Client) doOnce(ctx context.Context, url string) ([]byte, bool, error) {
 		return nil, true, newNetworkError("reading response: %v", err)
 	}
 	return body, false, nil
+}
+
+func refererForURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return tencentReferer
+	}
+	switch u.Hostname() {
+	case "push2.eastmoney.com", "push2ex.eastmoney.com":
+		return eastmoneyReferer
+	default:
+		return tencentReferer
+	}
 }
 
 // GetString performs an HTTP GET request and returns the response body as string.
