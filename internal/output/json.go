@@ -157,7 +157,7 @@ func hintForCode(code ErrorCode) string {
 	case ErrValidation:
 		return "Check command arguments and flags"
 	case ErrNetwork:
-		return "Check network connectivity and try again"
+		return "Check network connectivity; for HTTP 5xx, the upstream provider may be unavailable, retry later"
 	case ErrServer:
 		return "Upstream server returned an error; try again later"
 	case ErrNotFound:
