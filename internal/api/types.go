@@ -45,8 +45,18 @@ func newServerError(format string, args ...any) error {
 	return &ServerError{Msg: fmt.Sprintf(format, args...)}
 }
 
+// NewServerError creates a ServerError (exported for use by the cmd layer).
+func NewServerError(format string, args ...any) error {
+	return &ServerError{Msg: fmt.Sprintf(format, args...)}
+}
+
 // newNetworkError creates a NetworkError.
 func newNetworkError(format string, args ...any) error {
+	return &NetworkError{Msg: fmt.Sprintf(format, args...)}
+}
+
+// NewNetworkError creates a NetworkError (exported for use by the cmd layer).
+func NewNetworkError(format string, args ...any) error {
 	return &NetworkError{Msg: fmt.Sprintf(format, args...)}
 }
 

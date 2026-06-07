@@ -2,9 +2,11 @@ package output
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func captureStderr(fn func()) string {
@@ -48,11 +50,15 @@ func TestPrintErrorJSON(t *testing.T) {
 	if !strings.Contains(output, "something failed") {
 		t.Errorf("PrintErrorJSON should contain error message, got: %s", output)
 	}
-	if !strings.Contains(output, `"UNKNOWN_ERROR"`) {
-		t.Errorf("PrintErrorJSON should default to UNKNOWN_ERROR, got: %s", output)
+	if !strings.Contains(output, `"E_UNKNOWN"`) {
+		t.Errorf("PrintErrorJSON should default to E_UNKNOWN, got: %s", output)
 	}
-	if !strings.Contains(output, `"error"`) {
-		t.Errorf("PrintErrorJSON should contain error field, got: %s", output)
+	var env Envelope
+	if err := json.Unmarshal([]byte(output), &env); err != nil {
+		t.Fatalf("PrintErrorJSON should emit valid JSON: %v", err)
+	}
+	if env.OK || env.SchemaVersion != SchemaVersion || env.Error == nil {
+		t.Errorf("PrintErrorJSON should emit an error envelope, got: %+v", env)
 	}
 }
 
@@ -64,14 +70,15 @@ func TestPrintErrorJSONWithCode(t *testing.T) {
 	if !strings.Contains(output, "bad args") {
 		t.Errorf("PrintErrorJSONWithCode should contain error message, got: %s", output)
 	}
-	if !strings.Contains(output, `"VALIDATION_ERROR"`) {
+	if !strings.Contains(output, `"E_BAD_ARGS"`) {
 		t.Errorf("PrintErrorJSONWithCode should contain error code, got: %s", output)
 	}
-	if !strings.Contains(output, `"hint"`) {
-		t.Errorf("PrintErrorJSONWithCode should contain hint field, got: %s", output)
+	var env Envelope
+	if err := json.Unmarshal([]byte(output), &env); err != nil {
+		t.Fatalf("invalid error envelope: %v", err)
 	}
-	if !strings.Contains(output, "Check command arguments") {
-		t.Errorf("PrintErrorJSONWithCode should contain hint text, got: %s", output)
+	if env.Error == nil || env.Error.Retryable {
+		t.Errorf("validation errors should not be retryable, got: %+v", env.Error)
 	}
 }
 
@@ -80,11 +87,15 @@ func TestPrintErrorJSONWithCodeNetwork(t *testing.T) {
 		PrintErrorJSONWithCode("timeout", 0, ErrNetwork)
 	})
 
-	if !strings.Contains(output, `"NETWORK_ERROR"`) {
-		t.Errorf("should contain NETWORK_ERROR, got: %s", output)
+	if !strings.Contains(output, `"E_NETWORK"`) {
+		t.Errorf("should contain E_NETWORK, got: %s", output)
 	}
-	if !strings.Contains(output, "network connectivity") {
-		t.Errorf("should contain network hint, got: %s", output)
+	var env Envelope
+	if err := json.Unmarshal([]byte(output), &env); err != nil {
+		t.Fatalf("invalid error envelope: %v", err)
+	}
+	if env.Error == nil || !env.Error.Retryable {
+		t.Errorf("network errors should be retryable, got: %+v", env.Error)
 	}
 }
 
@@ -93,8 +104,8 @@ func TestPrintErrorJSONWithCodeServer(t *testing.T) {
 		PrintErrorJSONWithCode("internal error", 0, ErrServer)
 	})
 
-	if !strings.Contains(output, `"SERVER_ERROR"`) {
-		t.Errorf("should contain SERVER_ERROR, got: %s", output)
+	if !strings.Contains(output, `"E_SERVER"`) {
+		t.Errorf("should contain E_SERVER, got: %s", output)
 	}
 }
 
@@ -103,11 +114,35 @@ func TestPrintErrorJSONWithCodeNotFound(t *testing.T) {
 		PrintErrorJSONWithCode("symbol not found", 0, ErrNotFound)
 	})
 
-	if !strings.Contains(output, `"NOT_FOUND"`) {
-		t.Errorf("should contain NOT_FOUND, got: %s", output)
+	if !strings.Contains(output, `"E_NOT_FOUND"`) {
+		t.Errorf("should contain E_NOT_FOUND, got: %s", output)
 	}
-	if !strings.Contains(output, "verify the input") {
-		t.Errorf("should contain not-found hint, got: %s", output)
+}
+
+func TestRenderEnvelope(t *testing.T) {
+	output := captureStdout(func() {
+		RenderEnvelope(map[string]any{"symbol": "sh600519", "name": "贵州茅台", "price": 1800}, []string{"symbol", "price"}, true, 12*time.Millisecond)
+	})
+
+	var env Envelope
+	if err := json.Unmarshal([]byte(output), &env); err != nil {
+		t.Fatalf("RenderEnvelope should emit valid JSON: %v\n%s", err, output)
+	}
+	if !env.OK || env.SchemaVersion != SchemaVersion || env.Data == nil || env.Meta == nil {
+		t.Fatalf("RenderEnvelope should emit success envelope, got: %+v", env)
+	}
+	if env.Meta.DurationMS != 12 {
+		t.Errorf("duration_ms = %d, want 12", env.Meta.DurationMS)
+	}
+	var data map[string]any
+	if err := json.Unmarshal(*env.Data, &data); err != nil {
+		t.Fatalf("invalid data: %v", err)
+	}
+	if _, ok := data["symbol"]; !ok {
+		t.Error("filtered data should include symbol")
+	}
+	if _, ok := data["name"]; ok {
+		t.Error("filtered data should omit name")
 	}
 }
 
