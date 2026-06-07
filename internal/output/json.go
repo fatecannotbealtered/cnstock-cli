@@ -192,10 +192,10 @@ func writeJSON(w io.Writer, v any, compact bool) {
 		data, err = json.MarshalIndent(v, "", "  ")
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, `{"ok":false,"schema_version":%q,"error":{"code":%q,"message":%q,"details":{},"retryable":false}}`+"\n", SchemaVersion, ErrUnknown, err.Error())
+		_, _ = fmt.Fprintf(os.Stderr, `{"ok":false,"schema_version":%q,"error":{"code":%q,"message":%q,"details":{},"retryable":false}}`+"\n", SchemaVersion, ErrUnknown, err.Error())
 		return
 	}
-	fmt.Fprintln(w, string(data))
+	_, _ = fmt.Fprintln(w, string(data))
 }
 
 func isRetryable(code ErrorCode) bool {
