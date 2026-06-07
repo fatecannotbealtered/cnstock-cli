@@ -107,23 +107,39 @@ cnstock-cli context
 
 - Prints version, Go/OS/arch, default format, command list, and per-endpoint config
 
+### update — Version Check
+
+```bash
+cnstock-cli update [--method auto|npm|go|github]
+```
+
+- Checks GitHub Releases and prints safe update instructions
+- Does not modify files or replace the running binary
+
 ### reference — Self-description
 
 ```bash
 cnstock-cli reference
 ```
 
-- Prints all commands, flags, and JSON schemas
+- Prints commands, flags, JSON schemas, error codes, and exit codes as structured JSON by default
+- Use `--format text` for the human-readable Markdown reference
 
 ## Global Flags
 
 - `--format json|text|raw` — Output format. `json` is the default (stable, low-token, parseable); `text` for human-readable tables; `raw` for the unwrapped upstream payload
 - `--compact` — Single-line JSON (lower token count)
-- `--fields a,b,c` — Restrict JSON output to an ordered subset of top-level fields
-- `--quiet` — Suppress non-result stdout output
-- `--json` — Deprecated alias for `--format json`
+- `--fields a,b,c` — Restrict JSON `data` to an ordered subset of top-level fields; envelope fields remain stable
+- `--quiet` — Suppress non-result human output
+- `--json` — Compatibility alias for `--format json`
 
-Output contract: results go to stdout; errors and progress go to stderr.
+Output contract:
+
+- stdout is exactly one valid JSON envelope by default.
+- stderr carries progress, warnings, diagnostics, and JSON error envelopes.
+- Success envelope: `{"ok":true,"schema_version":"1.0","data":{},"meta":{"duration_ms":0}}`
+- Failure envelope: `{"ok":false,"schema_version":"1.0","error":{"code":"E_BAD_ARGS","message":"...","details":{},"retryable":false}}`
+- The schemas below describe the value inside `data`, not the outer envelope.
 
 ## JSON Output Schemas
 
@@ -220,35 +236,65 @@ Output contract: results go to stdout; errors and progress go to stderr.
 }
 ```
 
+### Update Report
+
+```json
+{
+  "current_version": "1.1.0",
+  "latest_version": "v1.1.1",
+  "update_available": true,
+  "install_method": "npm",
+  "release_url": "https://github.com/fatecannotbealtered/cnstock-cli/releases/tag/v1.1.1",
+  "recommended_action": "npm install -g @fatecannotbealtered-/cnstock-cli@latest",
+  "commands": [
+    "npm install -g @fatecannotbealtered-/cnstock-cli@latest",
+    "go install github.com/fatecannotbealtered/cnstock-cli/cmd/cnstock-cli@latest",
+    "Download the latest binary from https://github.com/fatecannotbealtered/cnstock-cli/releases/latest"
+  ]
+}
+```
+
 ### Error Response
 
 ```json
 {
-  "error": "symbol cannot be empty",
-  "errorCode": "VALIDATION_ERROR",
-  "hint": "Check command arguments and flags"
+  "ok": false,
+  "schema_version": "1.0",
+  "error": {
+    "code": "E_BAD_ARGS",
+    "message": "symbol cannot be empty",
+    "details": {},
+    "retryable": false
+  }
 }
 ```
 
 ## Error Codes
 
-| Code | Exit | Meaning |
-|------|------|---------|
-| `VALIDATION_ERROR` | 2 | Invalid arguments or missing required params |
-| `NOT_FOUND` | 4 | Symbol or resource not found |
-| `SERVER_ERROR` | 7 | Backend server returned an error |
-| `NETWORK_ERROR` | 7 | Connection or HTTP transport failed |
-| `UNKNOWN_ERROR` | 1 | Unexpected error |
+| Code | Exit | Retryable | Meaning |
+|------|------|-----------|---------|
+| `E_BAD_ARGS` | 2 | false | Invalid arguments or usage |
+| `E_NOT_FOUND` | 3 | false | Symbol or resource not found |
+| `E_AUTH` | 4 | false | Authentication or permission failure |
+| `E_SERVER` | 7 | true | Upstream server returned an error |
+| `E_NETWORK` | 7 | true | Connection or HTTP transport failed |
+| `E_RATE_LIMITED` | 7 | true | Upstream rate limit |
+| `E_TIMEOUT` | 8 | true | Request timeout |
+| `E_UNKNOWN` | 1 | false | Unexpected error |
 
 ## Exit Codes
 
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | Unknown / unexpected error |
-| 2 | Bad arguments / validation error |
-| 4 | Resource not found |
-| 7 | Network or server error |
+| 1 | Generic error |
+| 2 | Arguments or usage error |
+| 3 | Resource not found |
+| 4 | Authentication or permission failure |
+| 5 | Confirmation token required |
+| 6 | Precondition conflict or state drift |
+| 7 | Retryable transient error |
+| 8 | Timeout |
 
 ## Environment Variables
 
@@ -264,6 +310,7 @@ No environment variables needed for normal use. These override default endpoints
 | `CNS_BREADTH_ENDPOINT` | Market advance/decline endpoint URL (Eastmoney) |
 | `CNS_LIMITUP_ENDPOINT` | Limit-up pool endpoint URL (Eastmoney, must contain `%s` for date) |
 | `CNS_LIMITDOWN_ENDPOINT` | Limit-down pool endpoint URL (Eastmoney, must contain `%s` for date) |
+| `CNS_UPDATE_ENDPOINT` | Latest-release endpoint used by `update` |
 
 ## Common Symbols
 

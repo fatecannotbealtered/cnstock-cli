@@ -4,9 +4,35 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
+	"time"
 )
+
+const SchemaVersion = "1.0"
+
+// Envelope is the stable machine-readable response wrapper for JSON output.
+type Envelope struct {
+	OK            bool             `json:"ok"`
+	SchemaVersion string           `json:"schema_version"`
+	Data          *json.RawMessage `json:"data,omitempty"`
+	Meta          *Meta            `json:"meta,omitempty"`
+	Error         *ErrorPayload    `json:"error,omitempty"`
+}
+
+// Meta contains non-contractual execution metadata.
+type Meta struct {
+	DurationMS int64 `json:"duration_ms"`
+}
+
+// ErrorPayload describes a machine-readable CLI failure.
+type ErrorPayload struct {
+	Code      ErrorCode      `json:"code"`
+	Message   string         `json:"message"`
+	Details   map[string]any `json:"details"`
+	Retryable bool           `json:"retryable"`
+}
 
 // PrintJSON outputs v as indented JSON to stdout.
 func PrintJSON(v any) {
@@ -18,28 +44,36 @@ func PrintJSON(v any) {
 	fmt.Println(string(data))
 }
 
-// RenderJSON outputs v as JSON to stdout, optionally filtering to an ordered set
-// of top-level fields and/or emitting compact single-line output.
+// RenderJSON outputs v as a JSON envelope to stdout.
+func RenderJSON(v any, fields []string, compact bool) {
+	RenderEnvelope(v, fields, compact, 0)
+}
+
+// RenderEnvelope outputs v as a JSON success envelope to stdout, optionally
+// filtering data to an ordered set of top-level fields and/or emitting compact
+// single-line output.
 //
-// Field filtering keeps only the requested keys, in the order given, which keeps
+// Field filtering keeps only the requested data keys, in the order given, which keeps
 // the output stable and low-token for agent consumption. It applies to a single
 // object or to each element of an array of objects.
-func RenderJSON(v any, fields []string, compact bool) {
+func RenderEnvelope(v any, fields []string, compact bool, duration time.Duration) {
 	data, err := json.Marshal(v)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "json marshal error: %v\n", err)
+		PrintErrorEnvelope(fmt.Sprintf("json marshal error: %v", err), ErrUnknown, false, nil, compact)
 		return
 	}
 	if len(fields) > 0 {
 		data = filterFields(data, fields)
 	}
-	if !compact {
-		var buf bytes.Buffer
-		if err := json.Indent(&buf, data, "", "  "); err == nil {
-			data = buf.Bytes()
-		}
+
+	raw := json.RawMessage(data)
+	payload := Envelope{
+		OK:            true,
+		SchemaVersion: SchemaVersion,
+		Data:          &raw,
+		Meta:          &Meta{DurationMS: duration.Milliseconds()},
 	}
-	fmt.Println(string(data))
+	writeJSON(os.Stdout, payload, compact)
 }
 
 // Raw writes s to stdout verbatim (no wrapping, no trailing formatting beyond a newline).
@@ -103,53 +137,74 @@ func filterObject(obj json.RawMessage, fields []string) []byte {
 type ErrorCode string
 
 const (
-	ErrConfig     ErrorCode = "CONFIG_ERROR"
-	ErrAuth       ErrorCode = "AUTH_REQUIRED"
-	ErrForbidden  ErrorCode = "FORBIDDEN"
-	ErrNotFound   ErrorCode = "NOT_FOUND"
-	ErrRateLimit  ErrorCode = "RATE_LIMITED"
-	ErrServer     ErrorCode = "SERVER_ERROR"
-	ErrValidation ErrorCode = "VALIDATION_ERROR"
-	ErrNetwork    ErrorCode = "NETWORK_ERROR"
-	ErrUnknown    ErrorCode = "UNKNOWN_ERROR"
+	ErrConfig     ErrorCode = "E_CONFIG"
+	ErrAuth       ErrorCode = "E_AUTH"
+	ErrForbidden  ErrorCode = "E_AUTH"
+	ErrNotFound   ErrorCode = "E_NOT_FOUND"
+	ErrRateLimit  ErrorCode = "E_RATE_LIMITED"
+	ErrServer     ErrorCode = "E_SERVER"
+	ErrValidation ErrorCode = "E_BAD_ARGS"
+	ErrNetwork    ErrorCode = "E_NETWORK"
+	ErrTimeout    ErrorCode = "E_TIMEOUT"
+	ErrUnknown    ErrorCode = "E_UNKNOWN"
 )
 
-// PrintErrorJSON outputs an error message as JSON to stderr.
+// PrintErrorJSON outputs an error envelope to stderr.
 func PrintErrorJSON(msg string) {
-	payload := struct {
-		Error     string    `json:"error"`
-		ErrorCode ErrorCode `json:"errorCode"`
-	}{
-		Error:     msg,
-		ErrorCode: ErrUnknown,
-	}
-	data, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, `{"error": %q, "errorCode": %q}`+"\n", msg, ErrUnknown)
-		return
-	}
-	fmt.Fprintln(os.Stderr, string(data))
+	PrintErrorEnvelope(msg, ErrUnknown, false, nil, false)
 }
 
-// PrintErrorJSONWithCode outputs an error with an explicit error code.
+// PrintErrorJSONWithCode outputs an error envelope with an explicit error code.
 func PrintErrorJSONWithCode(msg string, statusCode int, code ErrorCode) {
-	payload := struct {
-		Error      string    `json:"error"`
-		StatusCode int       `json:"statusCode,omitempty"`
-		ErrorCode  ErrorCode `json:"errorCode"`
-		Hint       string    `json:"hint,omitempty"`
-	}{
-		Error:      msg,
-		StatusCode: statusCode,
-		ErrorCode:  code,
-		Hint:       hintForCode(code),
+	details := map[string]any{}
+	if statusCode != 0 {
+		details["status_code"] = statusCode
 	}
-	data, err := json.MarshalIndent(payload, "", "  ")
+	PrintErrorEnvelope(msg, code, isRetryable(code), details, false)
+}
+
+// PrintErrorEnvelope outputs a JSON error envelope to stderr.
+func PrintErrorEnvelope(msg string, code ErrorCode, retryable bool, details map[string]any, compact bool) {
+	if details == nil {
+		details = map[string]any{}
+	}
+	payload := Envelope{
+		OK:            false,
+		SchemaVersion: SchemaVersion,
+		Error: &ErrorPayload{
+			Code:      code,
+			Message:   msg,
+			Details:   details,
+			Retryable: retryable,
+		},
+	}
+	writeJSON(os.Stderr, payload, compact)
+}
+
+func writeJSON(w io.Writer, v any, compact bool) {
+	var (
+		data []byte
+		err  error
+	)
+	if compact {
+		data, err = json.Marshal(v)
+	} else {
+		data, err = json.MarshalIndent(v, "", "  ")
+	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, `{"error": %q, "errorCode": %q}`+"\n", msg, code)
+		fmt.Fprintf(os.Stderr, `{"ok":false,"schema_version":%q,"error":{"code":%q,"message":%q,"details":{},"retryable":false}}`+"\n", SchemaVersion, ErrUnknown, err.Error())
 		return
 	}
-	fmt.Fprintln(os.Stderr, string(data))
+	fmt.Fprintln(w, string(data))
+}
+
+func isRetryable(code ErrorCode) bool {
+	switch code {
+	case ErrNetwork, ErrServer, ErrRateLimit, ErrTimeout:
+		return true
+	default:
+		return false
+	}
 }
 
 func hintForCode(code ErrorCode) string {

@@ -46,7 +46,7 @@ See [SECURITY.md](SECURITY.md) for the full data source disclaimer.
 | ? **K-line History** | Daily/weekly/monthly with forward/backward/no adjustment |
 | ?? **Intraday Minutes** | All minute-level ticks for the current trading day |
 | ? **Name Search** | Chinese, pinyin, English — find any stock code |
-| ? **AI Friendly** | JSON by default, `--format`/`--compact`/`--fields`, `reference`/`context`/`doctor` for self-discovery |
+| ? **AI Friendly** | Agent JSON envelope by default, `--format`/`--compact`/`--fields`, `reference`/`context`/`doctor` for self-discovery |
 | ? **Single Binary** | Download and run; no runtime dependencies |
 | ? **Beautiful Output** | Colored tables with CJK character support |
 | ? **Multi-market** | A-shares (SH/SZ/BJ), HK stocks, US stocks, indices, funds/ETFs |
@@ -69,6 +69,7 @@ cnstock-cli/
 │   ├── market.go                  # market subcommand
 │   ├── doctor.go                  # doctor (endpoint health)
 │   ├── context.go                 # context (environment)
+│   ├── update.go                  # update (release check)
 │   ├── render.go                  # output format dispatch helper
 │   ├── reference.go               # reference (AI self-discovery)
 │   └── cmd_test.go                # CLI smoke tests
@@ -91,7 +92,7 @@ cnstock-cli/
 │   │   └── kline_test.go
 │   └── output/
 │       ├── output.go              # ANSI colors + terminal detection
-│       ├── json.go                # JSON output + error codes
+│       ├── json.go                # JSON envelope output + error codes
 │       └── table.go               # Table output (CJK width-aware)
 ├── test/
 │   └── e2e/
@@ -249,13 +250,22 @@ cnstock-cli context
 
 Prints version, Go/OS/arch, default format, command list, and per-endpoint configuration (env var + whether overridden).
 
+### Update Check
+
+```bash
+cnstock-cli update
+cnstock-cli update --method npm
+```
+
+Checks GitHub Releases for the latest version and prints safe update instructions. It does not modify files or replace the running binary. `--method` accepts `auto`, `npm`, `go`, or `github` to control the recommended command.
+
 ### Reference
 
 ```bash
 cnstock-cli reference
 ```
 
-Prints all commands, flags, JSON schemas, and error codes in structured markdown — designed for AI agent self-discovery.
+Prints all commands, flags, JSON schemas, and error/exit codes as structured JSON by default. Use `--format text` for the human-readable Markdown view.
 
 ## Global Flags
 
@@ -263,26 +273,52 @@ Prints all commands, flags, JSON schemas, and error codes in structured markdown
 |------|-------------|
 | `--format` | Output format: `json` (default), `text`, `raw` |
 | `--compact` | Single-line JSON (lower token count) |
-| `--fields` | Restrict JSON output to an ordered subset of top-level fields |
-| `--quiet` | Suppress non-result stdout output |
-| `--json` | Deprecated alias for `--format json` |
+| `--fields` | Restrict JSON `data` to an ordered subset of top-level fields |
+| `--quiet` | Suppress non-result human output |
+| `--json` | Compatibility alias for `--format json` |
 | `--version` | Print version |
 | `--help` | Print help |
 
-Output is JSON by default (stable, low-token, parseable). Results go to stdout; errors and progress go to stderr. Use `--format text` for human-readable tables.
+Output is JSON by default (stable, low-token, parseable). Successful results go to stdout as one envelope; errors and progress go to stderr. Use `--format text` for human-readable tables and `--format raw` for unwrapped upstream payloads where supported.
 
 ## JSON Output
 
-Output is JSON by default — no flag needed. Example:
+Output is JSON by default — no flag needed. Success and failure use the same top-level envelope shape, so agents only need to inspect `ok`.
 
 ```json
 {
-  "symbol": "sh600519",
-  "market": "A股",
-  "name": "贵州茅台",
-  "price": 1800.00,
-  "change": 15.50,
-  "change_pct": 0.87
+  "ok": true,
+  "schema_version": "1.0",
+  "data": [
+    {
+      "symbol": "sh600519",
+      "market": "A股",
+      "name": "贵州茅台",
+      "price": 1800.0,
+      "change": 15.5,
+      "change_pct": 0.87
+    }
+  ],
+  "meta": {
+    "duration_ms": 12
+  }
+}
+```
+
+`--fields symbol,price` filters fields inside `data`; `ok`, `schema_version`, and `meta` remain stable.
+
+Error envelope:
+
+```json
+{
+  "ok": false,
+  "schema_version": "1.0",
+  "error": {
+    "code": "E_BAD_ARGS",
+    "message": "symbol cannot be empty",
+    "details": {},
+    "retryable": false
+  }
 }
 ```
 
@@ -304,16 +340,34 @@ For advanced use (testing, proxying, or self-hosted endpoints), the following en
 | `CNS_BREADTH_ENDPOINT` | Eastmoney `ulist.np` | Market advance/decline endpoint |
 | `CNS_LIMITUP_ENDPOINT` | Eastmoney ZT pool | Limit-up pool endpoint (must contain `%s` for date) |
 | `CNS_LIMITDOWN_ENDPOINT` | Eastmoney DT pool | Limit-down pool endpoint (must contain `%s` for date) |
+| `CNS_UPDATE_ENDPOINT` | GitHub latest release API | Latest-release endpoint used by `update` |
 
 ## Error Codes
 
-| Code | Exit | Meaning |
-|------|------|---------|
-| `VALIDATION_ERROR` | 2 | Invalid arguments or missing required params |
-| `NOT_FOUND` | 4 | Symbol or resource not found |
-| `SERVER_ERROR` | 7 | Backend server returned an error |
-| `NETWORK_ERROR` | 7 | Connection or HTTP transport failed |
-| `UNKNOWN_ERROR` | 1 | Unexpected error (e.g. malformed upstream response) |
+| Code | Exit | Retryable | Meaning |
+|------|------|-----------|---------|
+| `E_BAD_ARGS` | 2 | false | Invalid arguments or usage |
+| `E_NOT_FOUND` | 3 | false | Symbol or resource not found |
+| `E_AUTH` | 4 | false | Authentication or permission failure |
+| `E_SERVER` | 7 | true | Upstream server returned an error |
+| `E_NETWORK` | 7 | true | Connection or HTTP transport failed |
+| `E_RATE_LIMITED` | 7 | true | Upstream rate limit |
+| `E_TIMEOUT` | 8 | true | Request timeout |
+| `E_UNKNOWN` | 1 | false | Unexpected error |
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Generic error |
+| 2 | Arguments or usage error |
+| 3 | Resource not found |
+| 4 | Authentication or permission failure |
+| 5 | Confirmation token required |
+| 6 | Precondition conflict or state drift |
+| 7 | Retryable transient error |
+| 8 | Timeout |
 
 ## Security
 

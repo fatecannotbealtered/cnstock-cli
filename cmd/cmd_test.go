@@ -71,6 +71,16 @@ func TestSearchHelp(t *testing.T) {
 	}
 }
 
+func TestUpdateHelp(t *testing.T) {
+	out, err := executeCommand("update", "--help")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains([]byte(out), []byte("safe update instructions")) {
+		t.Error("update help should contain 'safe update instructions'")
+	}
+}
+
 func TestVersion(t *testing.T) {
 	out, err := executeCommand("--version")
 	if err != nil {

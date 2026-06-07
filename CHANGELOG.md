@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-06-07
+
+### Added
+
+- **`update` command**: Checks the latest GitHub Release and prints safe update instructions for npm, Go install, or direct GitHub binary downloads. The command is read-only and does not replace the running binary.
+
+### Changed
+
+- **Agent JSON envelope**: Default JSON output now returns a stable envelope with `ok`, `schema_version`, `data`, and `meta.duration_ms`. `--fields` filters inside `data` while preserving the envelope.
+- **Error envelope and codes**: JSON errors now use `ok:false` with `error.code`, `error.message`, `error.details`, and `error.retryable`. Error codes now follow the `E_*` contract (`E_BAD_ARGS`, `E_NOT_FOUND`, `E_NETWORK`, `E_TIMEOUT`, etc.).
+- **Exit codes aligned for agents**: Exit code `3` is now resource-not-found, `4` is auth/permission, `7` is retryable transient failure, and `8` is timeout.
+- **`reference` output**: `cnstock-cli reference` now emits machine-readable JSON by default. Use `--format text` for the Markdown view.
+
+### Fixed
+
+- **`market` command stability**: Switch the Eastmoney breadth endpoint to the webguest `ulist.np` path and use host-appropriate Referer headers for Eastmoney requests.
+
 ## [1.0.3] - 2026-06-05
 
 ### Added
@@ -77,7 +94,8 @@ Initial release of cnstock-cli.
 - **Data source disclaimer**: Endpoints are from Tencent Finance public web pages, NOT an official API. No SLA, no schema contract, no rate-limit policy. For personal/research use only.
 - **Non-affiliation**: Not an official Tencent product; data rights remain with their respective holders.
 
-[Unreleased]: https://github.com/fatecannotbealtered/cnstock-cli/compare/v1.0.3...HEAD
+[Unreleased]: https://github.com/fatecannotbealtered/cnstock-cli/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/fatecannotbealtered/cnstock-cli/compare/v1.0.3...v1.1.0
 [1.0.3]: https://github.com/fatecannotbealtered/cnstock-cli/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/fatecannotbealtered/cnstock-cli/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/fatecannotbealtered/cnstock-cli/compare/v1.0.0...v1.0.1

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/fatecannotbealtered/cnstock-cli/internal/api"
 	"github.com/fatecannotbealtered/cnstock-cli/internal/output"
@@ -12,36 +13,46 @@ import (
 )
 
 // classifyError maps an API error to the appropriate ErrorCode and exit code.
-func classifyError(err error) (output.ErrorCode, int) {
+func classifyError(err error) (output.ErrorCode, int, bool) {
 	var validationErr *api.ValidationError
 	if errors.As(err, &validationErr) {
-		return output.ErrValidation, ExitBadArgs
+		return output.ErrValidation, ExitBadArgs, false
 	}
 	var notFoundErr *api.NotFoundError
 	if errors.As(err, &notFoundErr) {
-		return output.ErrNotFound, ExitNotFound
+		return output.ErrNotFound, ExitNotFound, false
 	}
 	var serverErr *api.ServerError
 	if errors.As(err, &serverErr) {
-		return output.ErrServer, ExitNetwork
+		return output.ErrServer, ExitTransient, true
 	}
 	var networkErr *api.NetworkError
 	if errors.As(err, &networkErr) {
-		return output.ErrNetwork, ExitNetwork
+		if isTimeoutError(networkErr.Error()) {
+			return output.ErrTimeout, ExitTimeout, true
+		}
+		return output.ErrNetwork, ExitTransient, true
 	}
-	return output.ErrUnknown, ExitGeneric
+	if isUsageError(err.Error()) {
+		return output.ErrValidation, ExitBadArgs, false
+	}
+	return output.ErrUnknown, ExitGeneric, false
 }
 
 // Exit codes for machine-readable error classification.
 const (
-	ExitOK        = 0
-	ExitGeneric   = 1
-	ExitBadArgs   = 2
-	ExitAuth      = 3
-	ExitNotFound  = 4
-	ExitForbidden = 5
-	ExitRateLimit = 6
-	ExitNetwork   = 7
+	ExitOK              = 0
+	ExitGeneric         = 1
+	ExitBadArgs         = 2
+	ExitNotFound        = 3
+	ExitAuth            = 4
+	ExitForbidden       = 4
+	ExitConfirmRequired = 5
+	ExitConflict        = 6
+	ExitTransient       = 7
+	ExitNetwork         = 7
+	ExitRateLimit       = 7
+	ExitTimeout         = 8
 )
 
 // ErrSilent indicates the error has been printed; cobra should not print again.
@@ -58,10 +69,12 @@ var (
 	jsonMode bool
 	// compactMode emits single-line JSON (lower token count).
 	compactMode bool
-	// fieldsList restricts JSON output to an ordered subset of top-level fields.
+	// fieldsList restricts JSON data to an ordered subset of top-level fields.
 	fieldsList []string
 	// quietMode suppresses non-result stdout output.
 	quietMode bool
+	// commandStartedAt is used for JSON envelope meta.duration_ms.
+	commandStartedAt time.Time
 )
 
 // validFormats enumerates accepted --format values.
@@ -107,10 +120,9 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&outputFormat, "format", "json", "Output format: json|text|raw")
 	rootCmd.PersistentFlags().BoolVar(&compactMode, "compact", false, "Emit single-line JSON (lower token count)")
-	rootCmd.PersistentFlags().StringSliceVar(&fieldsList, "fields", nil, "Restrict JSON output to these top-level fields (ordered, comma-separated)")
-	rootCmd.PersistentFlags().BoolVar(&jsonMode, "json", false, "Deprecated alias for --format json")
+	rootCmd.PersistentFlags().StringSliceVar(&fieldsList, "fields", nil, "Restrict JSON data to these top-level fields (ordered, comma-separated)")
+	rootCmd.PersistentFlags().BoolVar(&jsonMode, "json", false, "Compatibility alias for --format json")
 	rootCmd.PersistentFlags().BoolVar(&quietMode, "quiet", false, "Suppress non-result stdout output")
-	_ = rootCmd.PersistentFlags().MarkDeprecated("json", "use --format json (json is the default)")
 
 	// Resolve and validate output flags before any command runs.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
@@ -138,7 +150,19 @@ func init() {
 
 // Execute runs the root command.
 func Execute() error {
-	return rootCmd.Execute()
+	lastExit = ExitOK
+	commandStartedAt = time.Now()
+	err := rootCmd.Execute()
+	if err != nil {
+		if errors.Is(err, ErrSilent) {
+			return err
+		}
+		return handleError(err)
+	}
+	if lastExit != ExitOK {
+		return ErrSilent
+	}
+	return nil
 }
 
 // handleError emits an error in the active output format and sets the exit code.
@@ -146,12 +170,32 @@ func Execute() error {
 // machine-readable JSON error envelope to stderr.
 func handleError(err error) error {
 	msg := err.Error()
-	code, exitCode := classifyError(err)
+	code, exitCode, retryable := classifyError(err)
 	if outputFormat == "text" {
 		output.Error(msg)
 	} else {
-		output.PrintErrorJSONWithCode(msg, 0, code)
+		output.PrintErrorEnvelope(msg, code, retryable, nil, compactMode)
 	}
 	setExitCode(exitCode)
 	return ErrSilent
+}
+
+func commandDuration() time.Duration {
+	if commandStartedAt.IsZero() {
+		return 0
+	}
+	return time.Since(commandStartedAt)
+}
+
+func isTimeoutError(msg string) bool {
+	msg = strings.ToLower(msg)
+	return strings.Contains(msg, "timeout") || strings.Contains(msg, "deadline exceeded")
+}
+
+func isUsageError(msg string) bool {
+	msg = strings.ToLower(msg)
+	return strings.Contains(msg, "accepts ") ||
+		strings.Contains(msg, "requires ") ||
+		strings.Contains(msg, "unknown flag") ||
+		strings.Contains(msg, "invalid argument")
 }

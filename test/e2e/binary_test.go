@@ -173,6 +173,57 @@ type cmdResult struct {
 	ExitCode int
 }
 
+type jsonEnvelope struct {
+	OK            bool            `json:"ok"`
+	SchemaVersion string          `json:"schema_version"`
+	Data          json.RawMessage `json:"data"`
+	Error         *jsonError      `json:"error"`
+	Meta          map[string]any  `json:"meta"`
+}
+
+type jsonError struct {
+	Code      string         `json:"code"`
+	Message   string         `json:"message"`
+	Details   map[string]any `json:"details"`
+	Retryable bool           `json:"retryable"`
+}
+
+func decodeData(t *testing.T, stdout string, out any) jsonEnvelope {
+	t.Helper()
+	var env jsonEnvelope
+	if err := json.Unmarshal([]byte(stdout), &env); err != nil {
+		t.Fatalf("invalid JSON envelope: %v\nstdout: %s", err, stdout)
+	}
+	if !env.OK {
+		t.Fatalf("expected ok=true envelope, got: %+v", env)
+	}
+	if env.SchemaVersion != "1.0" {
+		t.Fatalf("schema_version = %q, want 1.0", env.SchemaVersion)
+	}
+	if len(env.Data) == 0 {
+		t.Fatalf("missing data in envelope: %+v", env)
+	}
+	if err := json.Unmarshal(env.Data, out); err != nil {
+		t.Fatalf("invalid envelope data: %v\nstdout: %s", err, stdout)
+	}
+	return env
+}
+
+func decodeError(t *testing.T, stderr string) jsonEnvelope {
+	t.Helper()
+	var env jsonEnvelope
+	if err := json.Unmarshal([]byte(stderr), &env); err != nil {
+		t.Fatalf("invalid JSON error envelope: %v\nstderr: %s", err, stderr)
+	}
+	if env.OK || env.Error == nil {
+		t.Fatalf("expected ok=false error envelope, got: %+v", env)
+	}
+	if env.SchemaVersion != "1.0" {
+		t.Fatalf("schema_version = %q, want 1.0", env.SchemaVersion)
+	}
+	return env
+}
+
 func runBinary(env map[string]string, args ...string) cmdResult {
 	cmd := exec.Command(binaryPath, args...)
 	cmd.Env = os.Environ()
@@ -214,9 +265,7 @@ func TestBinary_QuoteJSON(t *testing.T) {
 	}
 
 	var quotes []map[string]any
-	if err := json.Unmarshal([]byte(r.Stdout), &quotes); err != nil {
-		t.Fatalf("invalid JSON output: %v\nstdout: %s", err, r.Stdout)
-	}
+	decodeData(t, r.Stdout, &quotes)
 	if len(quotes) != 1 {
 		t.Fatalf("expected 1 quote in JSON, got %d", len(quotes))
 	}
@@ -242,9 +291,7 @@ func TestBinary_QuoteBatchJSON(t *testing.T) {
 	}
 
 	var quotes []map[string]any
-	if err := json.Unmarshal([]byte(r.Stdout), &quotes); err != nil {
-		t.Fatalf("invalid JSON output: %v", err)
-	}
+	decodeData(t, r.Stdout, &quotes)
 	// sh600519 (data) + sz000858 (missing from server) = 2
 	if len(quotes) != 2 {
 		t.Fatalf("expected 2 quotes in batch JSON, got %d", len(quotes))
@@ -264,9 +311,7 @@ func TestBinary_KlineJSON(t *testing.T) {
 	}
 
 	var bars []map[string]any
-	if err := json.Unmarshal([]byte(r.Stdout), &bars); err != nil {
-		t.Fatalf("invalid JSON output: %v\nstdout: %s", err, r.Stdout)
-	}
+	decodeData(t, r.Stdout, &bars)
 	if len(bars) != 4 {
 		t.Fatalf("expected 4 bars, got %d", len(bars))
 	}
@@ -288,9 +333,7 @@ func TestBinary_MinuteJSON(t *testing.T) {
 	}
 
 	var ticks []map[string]any
-	if err := json.Unmarshal([]byte(r.Stdout), &ticks); err != nil {
-		t.Fatalf("invalid JSON output: %v\nstdout: %s", err, r.Stdout)
-	}
+	decodeData(t, r.Stdout, &ticks)
 	if len(ticks) != 4 {
 		t.Fatalf("expected 4 ticks, got %d", len(ticks))
 	}
@@ -312,9 +355,7 @@ func TestBinary_SearchJSON(t *testing.T) {
 	}
 
 	var results []map[string]any
-	if err := json.Unmarshal([]byte(r.Stdout), &results); err != nil {
-		t.Fatalf("invalid JSON output: %v\nstdout: %s", err, r.Stdout)
-	}
+	decodeData(t, r.Stdout, &results)
 	if len(results) != 3 {
 		t.Fatalf("expected 3 results, got %d", len(results))
 	}
@@ -332,8 +373,9 @@ func TestBinary_SearchEmptyKeyword(t *testing.T) {
 	if r.ExitCode != 2 {
 		t.Errorf("exit code = %d, want 2 (validation error); stderr: %s", r.ExitCode, r.Stderr)
 	}
-	if !strings.Contains(r.Stderr, "VALIDATION_ERROR") {
-		t.Errorf("stderr should contain VALIDATION_ERROR, got: %s", r.Stderr)
+	env := decodeError(t, r.Stderr)
+	if env.Error.Code != "E_BAD_ARGS" || env.Error.Retryable {
+		t.Errorf("error = %+v, want E_BAD_ARGS retryable=false", env.Error)
 	}
 }
 
@@ -353,9 +395,7 @@ func TestBinary_QuoteNoData(t *testing.T) {
 	}
 
 	var quotes []map[string]any
-	if err := json.Unmarshal([]byte(r.Stdout), &quotes); err != nil {
-		t.Fatalf("invalid JSON output: %v", err)
-	}
+	decodeData(t, r.Stdout, &quotes)
 	// sh999999 (no data) + sh600519 (missing) = 2
 	if len(quotes) != 2 {
 		t.Fatalf("expected 2 quotes, got %d", len(quotes))
@@ -368,8 +408,9 @@ func TestBinary_KlineInvalidLimit(t *testing.T) {
 	if r.ExitCode != 2 {
 		t.Errorf("exit code = %d, want 2 (validation error); stderr: %s", r.ExitCode, r.Stderr)
 	}
-	if !strings.Contains(r.Stderr, "VALIDATION_ERROR") {
-		t.Errorf("stderr should contain VALIDATION_ERROR, got: %s", r.Stderr)
+	env := decodeError(t, r.Stderr)
+	if env.Error.Code != "E_BAD_ARGS" || env.Error.Retryable {
+		t.Errorf("error = %+v, want E_BAD_ARGS retryable=false", env.Error)
 	}
 }
 
@@ -379,8 +420,9 @@ func TestBinary_KlineInvalidAdj(t *testing.T) {
 	if r.ExitCode != 2 {
 		t.Errorf("exit code = %d, want 2 (validation error); stderr: %s", r.ExitCode, r.Stderr)
 	}
-	if !strings.Contains(r.Stderr, "VALIDATION_ERROR") {
-		t.Errorf("stderr should contain VALIDATION_ERROR, got: %s", r.Stderr)
+	env := decodeError(t, r.Stderr)
+	if env.Error.Code != "E_BAD_ARGS" || env.Error.Retryable {
+		t.Errorf("error = %+v, want E_BAD_ARGS retryable=false", env.Error)
 	}
 }
 
@@ -391,6 +433,10 @@ func TestBinary_NetworkError(t *testing.T) {
 
 	if r.ExitCode != 7 {
 		t.Errorf("exit code = %d, want 7 (network error); stderr: %s", r.ExitCode, r.Stderr)
+	}
+	env := decodeError(t, r.Stderr)
+	if env.Error.Code != "E_NETWORK" || !env.Error.Retryable {
+		t.Errorf("error = %+v, want E_NETWORK retryable=true", env.Error)
 	}
 }
 
@@ -422,11 +468,14 @@ func TestBinary_Reference(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Errorf("exit code = %d, want 0; stderr: %s", r.ExitCode, r.Stderr)
 	}
-	if !strings.Contains(r.Stdout, "quote") {
-		t.Errorf("stdout should contain 'quote' command docs, got: %s", r.Stdout)
+	var ref map[string]any
+	decodeData(t, r.Stdout, &ref)
+	commands, ok := ref["commands"].([]any)
+	if !ok || len(commands) == 0 {
+		t.Fatalf("reference should contain commands, got: %#v", ref["commands"])
 	}
-	if !strings.Contains(r.Stdout, "kline") {
-		t.Errorf("stdout should contain 'kline' command docs")
+	if !strings.Contains(r.Stdout, "quote") || !strings.Contains(r.Stdout, "kline") {
+		t.Errorf("reference should contain quote and kline command docs, got: %s", r.Stdout)
 	}
 }
 
@@ -443,9 +492,7 @@ func TestBinary_DefaultFormatIsJSON(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0; stderr: %s", r.ExitCode, r.Stderr)
 	}
 	var quotes []map[string]any
-	if err := json.Unmarshal([]byte(r.Stdout), &quotes); err != nil {
-		t.Fatalf("default output is not JSON: %v\nstdout: %s", err, r.Stdout)
-	}
+	decodeData(t, r.Stdout, &quotes)
 }
 
 func TestBinary_FieldsAndCompact(t *testing.T) {
@@ -464,8 +511,9 @@ func TestBinary_FieldsAndCompact(t *testing.T) {
 		t.Errorf("--compact output should be single-line, got: %s", out)
 	}
 	var quotes []map[string]any
-	if err := json.Unmarshal([]byte(out), &quotes); err != nil {
-		t.Fatalf("invalid JSON: %v\nstdout: %s", err, out)
+	env := decodeData(t, out, &quotes)
+	if _, ok := env.Meta["duration_ms"]; !ok {
+		t.Error("envelope should include meta.duration_ms")
 	}
 	if len(quotes) != 1 {
 		t.Fatalf("expected 1 quote, got %d", len(quotes))
@@ -503,8 +551,9 @@ func TestBinary_InvalidFormat(t *testing.T) {
 	if r.ExitCode != 2 {
 		t.Errorf("exit code = %d, want 2; stderr: %s", r.ExitCode, r.Stderr)
 	}
-	if !strings.Contains(r.Stderr, "VALIDATION_ERROR") {
-		t.Errorf("stderr should contain VALIDATION_ERROR, got: %s", r.Stderr)
+	env := decodeError(t, r.Stderr)
+	if env.Error.Code != "E_BAD_ARGS" {
+		t.Errorf("error code = %s, want E_BAD_ARGS", env.Error.Code)
 	}
 }
 
@@ -515,9 +564,7 @@ func TestBinary_Context(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0; stderr: %s", r.ExitCode, r.Stderr)
 	}
 	var ctx map[string]any
-	if err := json.Unmarshal([]byte(r.Stdout), &ctx); err != nil {
-		t.Fatalf("context output is not JSON: %v\nstdout: %s", err, r.Stdout)
-	}
+	decodeData(t, r.Stdout, &ctx)
 	if ctx["default_format"] != "json" {
 		t.Errorf("default_format = %v, want json", ctx["default_format"])
 	}
@@ -539,7 +586,5 @@ func TestBinary_QuietMode(t *testing.T) {
 	}
 	// With --quiet + --json, stdout should be clean JSON only
 	var quotes []map[string]any
-	if err := json.Unmarshal([]byte(r.Stdout), &quotes); err != nil {
-		t.Fatalf("stdout is not valid JSON with --quiet: %v\nstdout: %s", err, r.Stdout)
-	}
+	decodeData(t, r.Stdout, &quotes)
 }
