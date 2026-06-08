@@ -111,6 +111,7 @@ func parseSectorResponse(text string) ([]Sector, error) {
 			Volume:         parseOptionalFloat(r.Volume),
 			TurnoverRate:   parseOptionalFloat(r.Hsl),
 			AdvanceDecline: r.Zgb,
+			Untrusted:      []string{"name", "advance_decline"},
 		}
 		if r.Lzg.Name != "" {
 			s.LeadingStock = &LeadingStock{
@@ -118,7 +119,9 @@ func parseSectorResponse(text string) ([]Sector, error) {
 				Name:      r.Lzg.Name,
 				ChangePct: parseOptionalFloat(r.Lzg.Zdf),
 				Price:     parseOptionalFloat(r.Lzg.Zxj),
+				Untrusted: []string{"name"},
 			}
+			s.Untrusted = append(s.Untrusted, "leading_stock.name")
 		}
 		sectors = append(sectors, s)
 	}

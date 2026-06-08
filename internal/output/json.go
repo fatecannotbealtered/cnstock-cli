@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const SchemaVersion = "1.0"
+const SchemaVersion = "2.0"
 
 // Envelope is the stable machine-readable response wrapper for JSON output.
 type Envelope struct {
@@ -139,13 +139,16 @@ type ErrorCode string
 const (
 	ErrConfig     ErrorCode = "E_CONFIG"
 	ErrAuth       ErrorCode = "E_AUTH"
-	ErrForbidden  ErrorCode = "E_AUTH"
+	ErrForbidden  ErrorCode = "E_FORBIDDEN"
 	ErrNotFound   ErrorCode = "E_NOT_FOUND"
 	ErrRateLimit  ErrorCode = "E_RATE_LIMITED"
 	ErrServer     ErrorCode = "E_SERVER"
-	ErrValidation ErrorCode = "E_BAD_ARGS"
+	ErrValidation ErrorCode = "E_VALIDATION"
 	ErrNetwork    ErrorCode = "E_NETWORK"
 	ErrTimeout    ErrorCode = "E_TIMEOUT"
+	ErrConfirm    ErrorCode = "E_CONFIRMATION_REQUIRED"
+	ErrConflict   ErrorCode = "E_CONFLICT"
+	ErrHuman      ErrorCode = "E_HUMAN_REQUIRED"
 	ErrUnknown    ErrorCode = "E_UNKNOWN"
 )
 
@@ -165,12 +168,20 @@ func PrintErrorJSONWithCode(msg string, statusCode int, code ErrorCode) {
 
 // PrintErrorEnvelope outputs a JSON error envelope to stderr.
 func PrintErrorEnvelope(msg string, code ErrorCode, retryable bool, details map[string]any, compact bool) {
+	PrintErrorEnvelopeWithDuration(msg, code, retryable, details, compact, 0)
+}
+
+// PrintErrorEnvelopeWithDuration outputs a JSON error envelope to stderr with
+// execution metadata. Error envelopes intentionally mirror success envelopes so
+// agents can always inspect ok/schema_version/meta first.
+func PrintErrorEnvelopeWithDuration(msg string, code ErrorCode, retryable bool, details map[string]any, compact bool, duration time.Duration) {
 	if details == nil {
 		details = map[string]any{}
 	}
 	payload := Envelope{
 		OK:            false,
 		SchemaVersion: SchemaVersion,
+		Meta:          &Meta{DurationMS: duration.Milliseconds()},
 		Error: &ErrorPayload{
 			Code:      code,
 			Message:   msg,
@@ -192,7 +203,7 @@ func writeJSON(w io.Writer, v any, compact bool) {
 		data, err = json.MarshalIndent(v, "", "  ")
 	}
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, `{"ok":false,"schema_version":%q,"error":{"code":%q,"message":%q,"details":{},"retryable":false}}`+"\n", SchemaVersion, ErrUnknown, err.Error())
+		_, _ = fmt.Fprintf(os.Stderr, `{"ok":false,"schema_version":%q,"meta":{"duration_ms":0},"error":{"code":%q,"message":%q,"details":{},"retryable":false}}`+"\n", SchemaVersion, ErrUnknown, err.Error())
 		return
 	}
 	_, _ = fmt.Fprintln(w, string(data))
@@ -217,6 +228,12 @@ func hintForCode(code ErrorCode) string {
 		return "Upstream server returned an error; try again later"
 	case ErrNotFound:
 		return "Symbol or resource not found; verify the input"
+	case ErrConfirm:
+		return "Run the command with --dry-run first, then retry with --confirm"
+	case ErrConflict:
+		return "Refresh state and retry from a new dry-run"
+	case ErrHuman:
+		return "Complete the requested human action, then resume"
 	default:
 		return ""
 	}

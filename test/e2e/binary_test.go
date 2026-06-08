@@ -197,8 +197,8 @@ func decodeData(t *testing.T, stdout string, out any) jsonEnvelope {
 	if !env.OK {
 		t.Fatalf("expected ok=true envelope, got: %+v", env)
 	}
-	if env.SchemaVersion != "1.0" {
-		t.Fatalf("schema_version = %q, want 1.0", env.SchemaVersion)
+	if env.SchemaVersion != "2.0" {
+		t.Fatalf("schema_version = %q, want 2.0", env.SchemaVersion)
 	}
 	if len(env.Data) == 0 {
 		t.Fatalf("missing data in envelope: %+v", env)
@@ -218,8 +218,11 @@ func decodeError(t *testing.T, stderr string) jsonEnvelope {
 	if env.OK || env.Error == nil {
 		t.Fatalf("expected ok=false error envelope, got: %+v", env)
 	}
-	if env.SchemaVersion != "1.0" {
-		t.Fatalf("schema_version = %q, want 1.0", env.SchemaVersion)
+	if env.SchemaVersion != "2.0" {
+		t.Fatalf("schema_version = %q, want 2.0", env.SchemaVersion)
+	}
+	if _, ok := env.Meta["duration_ms"]; !ok {
+		t.Fatalf("error envelope should include meta.duration_ms: %+v", env)
 	}
 	return env
 }
@@ -274,6 +277,10 @@ func TestBinary_QuoteJSON(t *testing.T) {
 	}
 	if quotes[0]["name"] != "贵州茅台" {
 		t.Errorf("name = %v, want 贵州茅台", quotes[0]["name"])
+	}
+	untrusted, ok := quotes[0]["_untrusted"].([]any)
+	if !ok || len(untrusted) == 0 {
+		t.Fatalf("quote should tag external text fields as _untrusted, got: %#v", quotes[0]["_untrusted"])
 	}
 }
 
@@ -337,8 +344,8 @@ func TestBinary_MinuteJSON(t *testing.T) {
 	if len(ticks) != 4 {
 		t.Fatalf("expected 4 ticks, got %d", len(ticks))
 	}
-	if ticks[0]["time"] != "0930" {
-		t.Errorf("tick[0].time = %v, want 0930", ticks[0]["time"])
+	if got, _ := ticks[0]["time"].(string); !strings.Contains(got, "T01:30:00Z") {
+		t.Errorf("tick[0].time = %v, want UTC RFC3339 containing T01:30:00Z", ticks[0]["time"])
 	}
 }
 
@@ -374,8 +381,8 @@ func TestBinary_SearchEmptyKeyword(t *testing.T) {
 		t.Errorf("exit code = %d, want 2 (validation error); stderr: %s", r.ExitCode, r.Stderr)
 	}
 	env := decodeError(t, r.Stderr)
-	if env.Error.Code != "E_BAD_ARGS" || env.Error.Retryable {
-		t.Errorf("error = %+v, want E_BAD_ARGS retryable=false", env.Error)
+	if env.Error.Code != "E_VALIDATION" || env.Error.Retryable {
+		t.Errorf("error = %+v, want E_VALIDATION retryable=false", env.Error)
 	}
 }
 
@@ -409,8 +416,8 @@ func TestBinary_KlineInvalidLimit(t *testing.T) {
 		t.Errorf("exit code = %d, want 2 (validation error); stderr: %s", r.ExitCode, r.Stderr)
 	}
 	env := decodeError(t, r.Stderr)
-	if env.Error.Code != "E_BAD_ARGS" || env.Error.Retryable {
-		t.Errorf("error = %+v, want E_BAD_ARGS retryable=false", env.Error)
+	if env.Error.Code != "E_VALIDATION" || env.Error.Retryable {
+		t.Errorf("error = %+v, want E_VALIDATION retryable=false", env.Error)
 	}
 }
 
@@ -421,8 +428,8 @@ func TestBinary_KlineInvalidAdj(t *testing.T) {
 		t.Errorf("exit code = %d, want 2 (validation error); stderr: %s", r.ExitCode, r.Stderr)
 	}
 	env := decodeError(t, r.Stderr)
-	if env.Error.Code != "E_BAD_ARGS" || env.Error.Retryable {
-		t.Errorf("error = %+v, want E_BAD_ARGS retryable=false", env.Error)
+	if env.Error.Code != "E_VALIDATION" || env.Error.Retryable {
+		t.Errorf("error = %+v, want E_VALIDATION retryable=false", env.Error)
 	}
 }
 
@@ -552,8 +559,33 @@ func TestBinary_InvalidFormat(t *testing.T) {
 		t.Errorf("exit code = %d, want 2; stderr: %s", r.ExitCode, r.Stderr)
 	}
 	env := decodeError(t, r.Stderr)
-	if env.Error.Code != "E_BAD_ARGS" {
-		t.Errorf("error code = %s, want E_BAD_ARGS", env.Error.Code)
+	if env.Error.Code != "E_VALIDATION" {
+		t.Errorf("error code = %s, want E_VALIDATION", env.Error.Code)
+	}
+}
+
+func TestBinary_DryRunRejectedForReadOnlyCommand(t *testing.T) {
+	r := runBinary(nil, "quote", "sh600519", "--dry-run")
+
+	if r.ExitCode != 2 {
+		t.Errorf("exit code = %d, want 2; stderr: %s", r.ExitCode, r.Stderr)
+	}
+	env := decodeError(t, r.Stderr)
+	if env.Error.Code != "E_VALIDATION" {
+		t.Errorf("error code = %s, want E_VALIDATION", env.Error.Code)
+	}
+}
+
+func TestBinary_Changelog(t *testing.T) {
+	r := runBinary(nil, "changelog", "--compact")
+
+	if r.ExitCode != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", r.ExitCode, r.Stderr)
+	}
+	var report map[string]any
+	decodeData(t, r.Stdout, &report)
+	if _, ok := report["entries"].([]any); !ok {
+		t.Fatalf("changelog should return entries, got: %#v", report)
 	}
 }
 
@@ -570,6 +602,12 @@ func TestBinary_Context(t *testing.T) {
 	}
 	if _, ok := ctx["endpoints"]; !ok {
 		t.Error("context should include 'endpoints'")
+	}
+	if ctx["risk_tier"] != "T0" {
+		t.Errorf("risk_tier = %v, want T0", ctx["risk_tier"])
+	}
+	if credentials, ok := ctx["credentials"].(map[string]any); !ok || credentials["required"] != false {
+		t.Errorf("context should report credentials.required=false, got: %#v", ctx["credentials"])
 	}
 }
 

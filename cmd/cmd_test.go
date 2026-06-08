@@ -81,6 +81,16 @@ func TestUpdateHelp(t *testing.T) {
 	}
 }
 
+func TestChangelogHelp(t *testing.T) {
+	out, err := executeCommand("changelog", "--help")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains([]byte(out), []byte("CHANGELOG.md")) {
+		t.Error("changelog help should contain 'CHANGELOG.md'")
+	}
+}
+
 func TestVersion(t *testing.T) {
 	out, err := executeCommand("--version")
 	if err != nil {

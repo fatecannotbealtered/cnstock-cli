@@ -70,7 +70,7 @@ func parseBreadthResponse(text string) (*MarketStats, error) {
 	var amount float64
 	var haveAmount bool
 	for _, d := range resp.Data.Diff {
-		mb := MarketBreadth{Name: d.F14, Amount: d.F6}
+		mb := MarketBreadth{Name: d.F14, Amount: d.F6, Untrusted: []string{"name"}}
 		if d.F104 != nil {
 			mb.Advancing = *d.F104
 			adv += *d.F104

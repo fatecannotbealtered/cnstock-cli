@@ -184,8 +184,8 @@ func TestE2E_QuoteSingleAStock(t *testing.T) {
 	if q.Low == nil || *q.Low != 1775.00 {
 		t.Errorf("low = %v, want 1775.00", q.Low)
 	}
-	if q.Time != "20240115150000" {
-		t.Errorf("time = %q, want 20240115150000", q.Time)
+	if q.Time != "2024-01-15T07:00:00Z" {
+		t.Errorf("time = %q, want 2024-01-15T07:00:00Z", q.Time)
 	}
 	if q.PeRatio == nil || *q.PeRatio != 33.50 {
 		t.Errorf("pe_ratio = %v, want 33.50", q.PeRatio)
@@ -272,8 +272,8 @@ func TestE2E_Minute(t *testing.T) {
 		t.Fatalf("expected 4 ticks, got %d", len(ticks))
 	}
 	first := ticks[0]
-	if first.Time != "0930" {
-		t.Errorf("tick[0].time = %q, want 0930", first.Time)
+	if !strings.Contains(first.Time, "T01:30:00Z") {
+		t.Errorf("tick[0].time = %q, want UTC RFC3339 containing T01:30:00Z", first.Time)
 	}
 	if first.Price == nil || *first.Price != 1790.00 {
 		t.Errorf("tick[0].price = %v, want 1790.00", first.Price)
@@ -284,8 +284,8 @@ func TestE2E_Minute(t *testing.T) {
 	if first.Amount == nil || *first.Amount != 1790000000 {
 		t.Errorf("tick[0].amount = %v, want 1790000000", first.Amount)
 	}
-	if ticks[3].Time != "0933" {
-		t.Errorf("tick[3].time = %q, want 0933", ticks[3].Time)
+	if !strings.Contains(ticks[3].Time, "T01:33:00Z") {
+		t.Errorf("tick[3].time = %q, want UTC RFC3339 containing T01:33:00Z", ticks[3].Time)
 	}
 }
 

@@ -137,14 +137,14 @@ func (c *Client) Get(ctx context.Context, url string) ([]byte, error) {
 func (c *Client) doOnce(ctx context.Context, url string) ([]byte, bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, false, newNetworkError("creating request: %v", err)
+		return nil, false, newNetworkError("creating request for %s: %v", RedactURL(url), RedactText(err.Error()))
 	}
 	req.Header.Set("Referer", refererForURL(url))
 	req.Header.Set("User-Agent", UserAgent)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, true, newNetworkError("network request failed: %v", err)
+		return nil, true, newNetworkError("network request failed for %s: %v", RedactURL(url), RedactText(err.Error()))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
