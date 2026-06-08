@@ -63,10 +63,11 @@ func parseSearchResponse(text string) ([]SearchResult, error) {
 		}
 		marketCode := strings.ToLower(parts[0])
 		results = append(results, SearchResult{
-			Symbol: composeSearchSymbol(marketCode, parts[1]),
-			Name:   decodeEscapedText(parts[2]),
-			Market: searchMarketMap[marketCode],
-			Pinyin: parts[3],
+			Symbol:    composeSearchSymbol(marketCode, parts[1]),
+			Name:      decodeEscapedText(parts[2]),
+			Market:    searchMarketMap[marketCode],
+			Pinyin:    parts[3],
+			Untrusted: []string{"name", "pinyin"},
 		})
 	}
 	return results, nil

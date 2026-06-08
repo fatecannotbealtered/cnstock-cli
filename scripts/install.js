@@ -79,26 +79,17 @@ function install() {
     console.log(`Downloading ${NAME} v${VERSION} for ${platform}-${arch}...`);
     download(GITHUB_URL, archivePath);
 
-    // Verify checksum
-    try {
-      download(checksumURL, checksumPath);
-      const checksumContent = fs.readFileSync(checksumPath, "utf8");
-      const line = checksumContent
-        .split("\n")
-        .find((l) => l.includes(archiveName));
-      if (line) {
-        const expectedHash = line.trim().split(/\s+/)[0];
-        verifyChecksum(archivePath, expectedHash);
-        console.log("✓ Checksum verified");
-      } else {
-        console.warn("Warning: archive not found in checksums.txt, skipping verification");
-      }
-    } catch (checksumErr) {
-      if (checksumErr.message.includes("Checksum mismatch")) {
-        throw checksumErr;
-      }
-      console.warn("Warning: could not verify checksum —", checksumErr.message);
+    download(checksumURL, checksumPath);
+    const checksumContent = fs.readFileSync(checksumPath, "utf8");
+    const line = checksumContent
+      .split("\n")
+      .find((l) => l.includes(archiveName));
+    if (!line) {
+      throw new Error(`archive ${archiveName} not found in checksums.txt`);
     }
+    const expectedHash = line.trim().split(/\s+/)[0];
+    verifyChecksum(archivePath, expectedHash);
+    console.log("✓ Checksum verified");
 
     // Extract binary
     if (isWindows) {

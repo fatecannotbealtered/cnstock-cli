@@ -51,6 +51,7 @@ type updateReport struct {
 	ReleaseURL        string   `json:"release_url"`
 	RecommendedAction string   `json:"recommended_action"`
 	Commands          []string `json:"commands"`
+	PostUpdateAction  string   `json:"post_update_action"`
 	Notes             []string `json:"notes,omitempty"`
 }
 
@@ -81,6 +82,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		ReleaseURL:        rel.HTMLURL,
 		RecommendedAction: commands[0],
 		Commands:          commands,
+		PostUpdateAction:  "After installing, run `cnstock-cli changelog --since " + version + "` before continuing.",
 	}
 	if report.ReleaseURL == "" {
 		report.ReleaseURL = latestReleaseURL
@@ -119,14 +121,14 @@ func latestReleaseEndpoint() string {
 func fetchLatestRelease(ctx context.Context, client *http.Client, endpoint string) (latestRelease, string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return latestRelease{}, "", api.NewNetworkError("creating update request: %v", err)
+		return latestRelease{}, "", api.NewNetworkError("creating update request for %s: %v", api.RedactURL(endpoint), api.RedactText(err.Error()))
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", api.UserAgent)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return latestRelease{}, "", api.NewNetworkError("checking latest release: %v", err)
+		return latestRelease{}, "", api.NewNetworkError("checking latest release at %s: %v", api.RedactURL(endpoint), api.RedactText(err.Error()))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -274,6 +276,7 @@ func printUpdateReport(report updateReport) {
 		{"method", report.InstallMethod},
 		{"release", report.ReleaseURL},
 		{"recommended", report.RecommendedAction},
+		{"post_update", report.PostUpdateAction},
 	}
 	output.Table(headers, rows)
 	for _, note := range report.Notes {

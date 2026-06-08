@@ -60,6 +60,7 @@ func parseMinuteResponse(text string, symbol string) ([]MinuteTick, error) {
 		return nil, nil
 	}
 
+	market := DetectMarket(symbol)
 	var ticks []MinuteTick
 	for _, item := range stockData.Data.Data {
 		parts := strings.Fields(item)
@@ -67,7 +68,7 @@ func parseMinuteResponse(text string, symbol string) ([]MinuteTick, error) {
 			continue
 		}
 		tick := MinuteTick{
-			Time:   parts[0],
+			Time:   parseMinuteTimeUTC(parts[0], market),
 			Price:  parseOptionalFloat(parts[1]),
 			Volume: parseOptionalFloat(parts[2]),
 		}

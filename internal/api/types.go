@@ -96,6 +96,7 @@ type Quote struct {
 	Warnings   []string `json:"warnings,omitempty"`
 	FieldCount int      `json:"field_count,omitempty"`
 	Error      string   `json:"error,omitempty"`
+	Untrusted  []string `json:"_untrusted,omitempty"`
 }
 
 // DepthLevel represents a single bid/ask price level.
@@ -124,10 +125,11 @@ type MinuteTick struct {
 
 // SearchResult represents a stock search result.
 type SearchResult struct {
-	Symbol string `json:"symbol"`
-	Name   string `json:"name"`
-	Market string `json:"market"`
-	Pinyin string `json:"pinyin"`
+	Symbol    string   `json:"symbol"`
+	Name      string   `json:"name"`
+	Market    string   `json:"market"`
+	Pinyin    string   `json:"pinyin"`
+	Untrusted []string `json:"_untrusted,omitempty"`
 }
 
 // LeadingStock is the best-performing constituent of a sector (领涨股).
@@ -136,6 +138,7 @@ type LeadingStock struct {
 	Name      string   `json:"name,omitempty"`
 	ChangePct *float64 `json:"change_pct,omitempty"`
 	Price     *float64 `json:"price,omitempty"`
+	Untrusted []string `json:"_untrusted,omitempty"`
 }
 
 // Sector represents one industry/concept board ranking row.
@@ -150,6 +153,7 @@ type Sector struct {
 	TurnoverRate   *float64      `json:"turnover_rate,omitempty"`   // 换手率
 	AdvanceDecline string        `json:"advance_decline,omitempty"` // 板块内涨跌家数, e.g. "190/481"
 	LeadingStock   *LeadingStock `json:"leading_stock,omitempty"`
+	Untrusted      []string      `json:"_untrusted,omitempty"`
 }
 
 // MarketBreadth is the advance/decline breakdown for a single exchange.
@@ -159,6 +163,7 @@ type MarketBreadth struct {
 	Declining int      `json:"declining"`
 	Flat      int      `json:"flat"`
 	Amount    *float64 `json:"amount,omitempty"`
+	Untrusted []string `json:"_untrusted,omitempty"`
 }
 
 // MarketStats aggregates whole-market breadth statistics.

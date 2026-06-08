@@ -61,6 +61,11 @@ var ErrSilent = errors.New("")
 // version is injected by goreleaser ldflags.
 var version = "dev"
 
+const (
+	riskTier            = "T0"
+	riskTierDescription = "read-only public market-data queries; no credentials; no external writes"
+)
+
 // Output control (global flags).
 var (
 	// outputFormat is the resolved output format: "json" (default), "text", or "raw".
@@ -73,6 +78,10 @@ var (
 	fieldsList []string
 	// quietMode suppresses non-result stdout output.
 	quietMode bool
+	// dryRunMode is reserved for write commands. cnstock-cli is currently read-only.
+	dryRunMode bool
+	// confirmToken is reserved for write commands. cnstock-cli is currently read-only.
+	confirmToken string
 	// commandStartedAt is used for JSON envelope meta.duration_ms.
 	commandStartedAt time.Time
 )
@@ -123,6 +132,8 @@ func init() {
 	rootCmd.PersistentFlags().StringSliceVar(&fieldsList, "fields", nil, "Restrict JSON data to these top-level fields (ordered, comma-separated)")
 	rootCmd.PersistentFlags().BoolVar(&jsonMode, "json", false, "Compatibility alias for --format json")
 	rootCmd.PersistentFlags().BoolVar(&quietMode, "quiet", false, "Suppress non-result stdout output")
+	rootCmd.PersistentFlags().BoolVar(&dryRunMode, "dry-run", false, "Reserved for write commands: preview changes without applying them")
+	rootCmd.PersistentFlags().StringVar(&confirmToken, "confirm", "", "Reserved for write commands: execute a prior dry-run confirmation token")
 
 	// Resolve and validate output flags before any command runs.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
@@ -135,6 +146,9 @@ func init() {
 			return handleError(api.NewValidationError("format only supports json, text, raw"))
 		}
 		output.Quiet = quietMode
+		if flagChanged(cmd, "dry-run") || flagChanged(cmd, "confirm") {
+			return handleError(api.NewValidationError("cnstock-cli is read-only; --dry-run and --confirm are reserved for future write commands"))
+		}
 		return nil
 	}
 
@@ -174,10 +188,26 @@ func handleError(err error) error {
 	if outputFormat == "text" {
 		output.Error(msg)
 	} else {
-		output.PrintErrorEnvelope(msg, code, retryable, nil, compactMode)
+		output.PrintErrorEnvelopeWithDuration(msg, code, retryable, nil, compactMode, commandDuration())
 	}
 	setExitCode(exitCode)
 	return ErrSilent
+}
+
+func flagChanged(cmd *cobra.Command, name string) bool {
+	if cmd == nil {
+		return false
+	}
+	if f := cmd.Flags().Lookup(name); f != nil && f.Changed {
+		return true
+	}
+	if f := cmd.InheritedFlags().Lookup(name); f != nil && f.Changed {
+		return true
+	}
+	if f := cmd.Root().PersistentFlags().Lookup(name); f != nil && f.Changed {
+		return true
+	}
+	return false
 }
 
 func commandDuration() time.Duration {

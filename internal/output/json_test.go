@@ -70,7 +70,7 @@ func TestPrintErrorJSONWithCode(t *testing.T) {
 	if !strings.Contains(output, "bad args") {
 		t.Errorf("PrintErrorJSONWithCode should contain error message, got: %s", output)
 	}
-	if !strings.Contains(output, `"E_BAD_ARGS"`) {
+	if !strings.Contains(output, `"E_VALIDATION"`) {
 		t.Errorf("PrintErrorJSONWithCode should contain error code, got: %s", output)
 	}
 	var env Envelope
@@ -79,6 +79,9 @@ func TestPrintErrorJSONWithCode(t *testing.T) {
 	}
 	if env.Error == nil || env.Error.Retryable {
 		t.Errorf("validation errors should not be retryable, got: %+v", env.Error)
+	}
+	if env.Meta == nil {
+		t.Errorf("error envelope should include meta, got: %+v", env)
 	}
 }
 

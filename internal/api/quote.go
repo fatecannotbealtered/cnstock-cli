@@ -125,7 +125,7 @@ func parseQuoteFields(symbol string, parts []string, market string) Quote {
 	q.PrevClose = getFloat(parts, 4)
 	q.Open = getFloat(parts, 5)
 	q.Volume = getFloat(parts, 6)
-	q.Time = getStr(parts, 30)
+	q.Time = parseQuoteTimeUTC(getStr(parts, 30), market)
 	q.Change = getFloat(parts, 31)
 	q.ChangePct = getFloat(parts, 32)
 	q.High = getFloat(parts, 33)
@@ -155,7 +155,19 @@ func parseQuoteFields(symbol string, parts []string, market string) Quote {
 		}
 	}
 
+	q.Untrusted = quoteUntrustedFields(q)
 	return q
+}
+
+func quoteUntrustedFields(q Quote) []string {
+	var fields []string
+	if q.Name != "" {
+		fields = append(fields, "name")
+	}
+	if q.NameEN != "" {
+		fields = append(fields, "name_en")
+	}
+	return fields
 }
 
 func parseDepth(parts []string, indexes []int) []DepthLevel {

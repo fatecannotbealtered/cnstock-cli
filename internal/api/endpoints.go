@@ -3,6 +3,8 @@ package api
 import (
 	"net/url"
 	"os"
+	"regexp"
+	"strings"
 )
 
 // EndpointInfo describes one configurable endpoint and whether it has been
@@ -26,6 +28,9 @@ type endpointDef struct {
 	env  string
 	def  string
 }
+
+var sensitiveURLParam = regexp.MustCompile(`(?i)^(ut)$|access[_-]?token|auth|authorization|cookie|key|passwd|password|secret|session|sign|token`)
+var urlUserInfo = regexp.MustCompile(`(https?://)[^/\s"@]+@`)
 
 // endpointDefs is the single source of truth for configurable endpoints.
 var endpointDefs = []endpointDef{
@@ -53,12 +58,55 @@ func Endpoints() []EndpointInfo {
 		infos = append(infos, EndpointInfo{
 			Name:       d.name,
 			Env:        d.env,
-			Default:    d.def,
-			Active:     active,
+			Default:    RedactURL(d.def),
+			Active:     RedactURL(active),
 			Overridden: overridden,
 		})
 	}
 	return infos
+}
+
+// RedactURL removes likely credentials from endpoint URLs before they are
+// exposed through context, doctor, or error details.
+func RedactURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return redactSensitivePairs(raw)
+	}
+	if u.User != nil {
+		u.User = url.User("REDACTED")
+	}
+	q := u.Query()
+	for key := range q {
+		if sensitiveURLParam.MatchString(key) {
+			q.Set(key, "REDACTED")
+		}
+	}
+	u.RawQuery = q.Encode()
+	return redactSensitivePairs(u.String())
+}
+
+// RedactText removes likely credentials from diagnostic text before it is
+// placed in error messages.
+func RedactText(s string) string {
+	s = urlUserInfo.ReplaceAllString(s, "${1}REDACTED@")
+	return redactSensitivePairs(s)
+}
+
+func redactSensitivePairs(s string) string {
+	parts := strings.FieldsFunc(s, func(r rune) bool {
+		return r == '&' || r == '?' || r == ';'
+	})
+	for _, part := range parts {
+		if i := strings.Index(part, "="); i > 0 && sensitiveURLParam.MatchString(part[:i]) {
+			s = strings.ReplaceAll(s, part, part[:i+1]+"REDACTED")
+		}
+	}
+	return s
 }
 
 // ProbeTargets returns representative, requestable URLs for connectivity checks.

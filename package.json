@@ -30,11 +30,17 @@
     "postinstall": "node scripts/install.js"
   },
   "files": [
+    ".agent/",
+    "AGENTS.md",
     "scripts/install.js",
     "scripts/run.js",
     "skills/",
+    "docs/",
+    "README_zh.md",
     "CHANGELOG.md",
+    "CODE_OF_CONDUCT.md",
     "CONTRIBUTING.md",
+    "NOTICE.md",
     "SECURITY.md"
   ],
   "os": [

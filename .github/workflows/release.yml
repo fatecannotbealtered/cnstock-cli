@@ -22,6 +22,14 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+
+      - name: Audit npm package
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Tidy modules
         run: go mod tidy
 
@@ -101,6 +109,9 @@ jobs:
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
+
+      - name: Audit npm package
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Verify package contents
         run: npm pack --dry-run
