@@ -76,6 +76,7 @@ type updateReport struct {
 	ExpiresAt         string         `json:"expires_at,omitempty"`
 	Preview           map[string]any `json:"preview,omitempty"`
 	Notes             []string       `json:"notes,omitempty"`
+	Notices           []updateNotice `json:"notices,omitempty"`
 }
 
 type updateConfirmPayload struct {
@@ -153,6 +154,8 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 	}
 
 	if updateCheckOnly {
+		report.Notices = updateNoticesFromReport(report, "update_check")
+		writeUpdateNoticeCache(report.Notices)
 		emitUpdateReport(report)
 		return nil
 	}

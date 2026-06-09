@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"runtime"
 	"sort"
 
@@ -38,6 +39,7 @@ type contextReport struct {
 	Config         contextConfig      `json:"config"`
 	Credentials    credentialStatus   `json:"credentials"`
 	Endpoints      []api.EndpointInfo `json:"endpoints"`
+	Notices        []updateNotice     `json:"notices,omitempty"`
 }
 
 type contextConfig struct {
@@ -64,6 +66,7 @@ func runContext(cmd *cobra.Command, args []string) error {
 		Formats:        []string{"json", "text", "raw"},
 		Commands:       commandNames(),
 		Endpoints:      api.Endpoints(),
+		Notices:        readCachedUpdateNotices(),
 	}
 	report.Config.EndpointOverrides = hasEndpointOverride(report.Endpoints)
 	report.Credentials = credentialStatus{Required: false, Configured: false}
@@ -86,6 +89,7 @@ func runContext(cmd *cobra.Command, args []string) error {
 		rows = append(rows, []string{e.Name, e.Env, ov})
 	}
 	output.Table(headers, rows)
+	printUpdateNoticeHint(os.Stdout, report.Notices)
 	return nil
 }
 

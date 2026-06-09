@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/fatecannotbealtered/cnstock-cli/internal/api"
@@ -43,12 +44,13 @@ type doctorReport struct {
 	RiskTier  string           `json:"risk_tier"`
 	Checks    []doctorCheck    `json:"checks"`
 	Endpoints []endpointHealth `json:"endpoints"`
+	Notices   []updateNotice   `json:"notices,omitempty"`
 }
 
 func runDoctor(cmd *cobra.Command, args []string) error {
 	client := api.NewClient().WithTimeout(5 * time.Second)
 
-	report := doctorReport{OK: true, CheckedAt: time.Now().UTC().Format(time.RFC3339), RiskTier: riskTier}
+	report := doctorReport{OK: true, CheckedAt: time.Now().UTC().Format(time.RFC3339), RiskTier: riskTier, Notices: refreshUpdateNotices(cmd.Context(), "doctor")}
 	versionCheck := doctorCheck{Check: "version", Status: versionStatus(), Fix: versionFix()}
 	if versionCheck.Status == "fail" {
 		report.OK = false
@@ -100,6 +102,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		rows = append(rows, []string{h.Name, ok, fmt.Sprintf("%dms", h.LatencyMs), h.Error})
 	}
 	output.Table(headers, rows)
+	printUpdateNoticeHint(os.Stdout, report.Notices)
 	if networkFailed {
 		setExitCode(ExitNetwork)
 	} else if !report.OK {
