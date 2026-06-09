@@ -11,22 +11,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`changelog` command**: Emits version changes derived from `CHANGELOG.md`, with `--since <version>` for agent knowledge refresh after updates.
 - **Agent-native repository entrypoints**: Added `AGENTS.md`, `NOTICE.md`, `CODE_OF_CONDUCT.md`, compatibility notes, E2E notes, and an open-source checklist aligned with `.agent/` specs.
-- **Security self-description**: `reference`, `context`, and `doctor` now declare the T0/read-only risk boundary, permission tier, credential status, and version readiness.
+- **Security self-description**: `reference`, `context`, and `doctor` now declare the T0 market-data boundary, local-write update boundary, credential status, and version readiness.
+- **Lifecycle update flow**: `update` now supports `--check`, `--dry-run`, and `--confirm <confirm_token>` for local package/binary updates plus Agent Skill sync.
 
 ### Changed
 
 - **Schema version 2.0**: JSON output now uses `schema_version:"2.0"` because the machine contract changed.
 - **Error taxonomy**: Validation failures now use `E_VALIDATION` instead of `E_BAD_ARGS`; error envelopes include `meta.duration_ms`.
 - **Reference contract**: `reference` now reports command params, output schemas, permission tier, risk tier, global write-confirmation flags, and `_untrusted` fields as the machine truth source.
-- **Read-only write flags**: `--dry-run` and `--confirm` are registered globally for spec consistency and explicitly rejected by current read-only commands.
+- **Local lifecycle writes**: market-data commands still reject `--dry-run` and `--confirm`; `update` uses them to preview and confirm self-update plus whole Skill directory sync through `npx skills add fatecannotbealtered/cnstock-cli -y -g`.
 - **Time fields**: Quote and minute JSON time fields now emit UTC ISO 8601 strings.
-- **Skill alignment**: The bundled Skill now points to `cnstock-cli reference` for drift-prone params, schemas, and error codes.
+- **Skill alignment**: The bundled Skill now points to `cnstock-cli reference` for drift-prone params, schemas, error codes, and update lifecycle rules.
 
 ### Security
 
 - **Untrusted external content**: Externally sourced text fields now include `_untrusted` markers so agents treat them as data, not instructions.
 - **Endpoint redaction**: `context` and `doctor` redact URL credentials and sensitive query parameters before printing endpoint configuration.
 - **npm install integrity**: `scripts/install.js` now hard-fails when checksum verification is unavailable or the archive is missing from `checksums.txt`.
+- **Signed release checksums**: Release checksums are signed with Sigstore/Cosign, and install/update paths report signature verification status separately from checksum verification.
 - **Supply-chain gate**: CI and release workflows now run `npm audit --omit=dev --audit-level=high`.
 
 ## [1.1.0] - 2026-06-07

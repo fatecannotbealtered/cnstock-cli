@@ -76,8 +76,8 @@ func TestUpdateHelp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains([]byte(out), []byte("safe update instructions")) {
-		t.Error("update help should contain 'safe update instructions'")
+	if !bytes.Contains([]byte(out), []byte("sync the whole Agent Skill directory")) {
+		t.Error("update help should contain 'sync the whole Agent Skill directory'")
 	}
 }
 
