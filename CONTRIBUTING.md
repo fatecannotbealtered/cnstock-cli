@@ -4,7 +4,7 @@ Thank you for improving cnstock-cli. This document describes how to build, test,
 
 ## Development setup
 
-- Go **1.23+** (see `go.mod`)
+- Go **1.25+** (see `go.mod`)
 - Node.js **16+** if you work on npm packaging or run supply-chain checks
 - Optional: **golangci-lint** (CI runs it on Linux)
 

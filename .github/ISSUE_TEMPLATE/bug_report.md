@@ -1,29 +1,48 @@
 ---
 name: Bug Report
-about: Report a bug or unexpected behavior
+about: Report a bug in cnstock-cli
 title: "[Bug] "
 labels: bug
+assignees: ''
 ---
 
 ## Description
 
-A clear description of the bug.
+A clear and concise description of the bug.
 
-## Steps to reproduce
+## Steps to Reproduce
 
-1. Run `cnstock-cli ...`
-2. ...
+1. Run command: `cnstock-cli ...`
+2. With flags: `--flag value`
+3. Observe error/incorrect behavior
 
-## Expected behavior
+## Expected Behavior
 
 What you expected to happen.
 
-## Actual behavior
+## Actual Behavior
 
 What actually happened. Include the full error output if applicable.
 
 ## Environment
 
-- OS: [e.g. Windows 11, macOS 14, Ubuntu 22.04]
-- cnstock-cli version: [e.g. 1.0.0]
-- Install method: [npm / go install / binary]
+- **cnstock-cli version**: (run `cnstock-cli --version`)
+- **OS**: (e.g., Windows 11, macOS 15, Ubuntu 24.04)
+- **Install method**: (e.g., npm, prebuilt binary, built from source)
+
+## Doctor Output
+
+<details>
+<summary><code>cnstock-cli doctor</code> output</summary>
+
+```
+(paste the output of `cnstock-cli doctor` here)
+```
+
+</details>
+
+## Additional Context
+
+- Config file contents (redact credentials)
+- Relevant log output
+- Screenshots if applicable

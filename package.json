@@ -1,7 +1,7 @@
 {
   "name": "@fatecannotbealtered-/cnstock-cli",
   "version": "1.1.0",
-  "description": "Real-time quotes, K-line, intraday minutes, and stock search for A/HK/US stocks — for humans and AI Agents",
+  "description": "Market data lookup CLI for AI Agents - quotes, K-line bars, intraday minutes, stock search, sectors, and market breadth for A/HK/US symbols",
   "keywords": [
     "cnstock",
     "finance",
@@ -10,10 +10,9 @@
     "ai-agent",
     "a-share",
     "hk-stock",
-    "us-stock",
-    "openclaw"
+    "us-stock"
   ],
-  "author": "guosong6886@gmail.com",
+  "author": "Sean Guo",
   "homepage": "https://github.com/fatecannotbealtered/cnstock-cli#readme",
   "bugs": {
     "url": "https://github.com/fatecannotbealtered/cnstock-cli/issues"
@@ -23,6 +22,9 @@
     "url": "git+https://github.com/fatecannotbealtered/cnstock-cli.git"
   },
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "cnstock-cli": "scripts/run.js"
   },
@@ -30,18 +32,21 @@
     "postinstall": "node scripts/install.js"
   },
   "files": [
-    ".agent/",
-    "AGENTS.md",
     "scripts/install.js",
     "scripts/run.js",
     "skills/",
-    "docs/",
+    "README.md",
     "README_zh.md",
-    "CHANGELOG.md",
-    "CODE_OF_CONDUCT.md",
-    "CONTRIBUTING.md",
+    "*_zh.md",
+    "LICENSE",
     "NOTICE.md",
-    "SECURITY.md"
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "CODE_OF_CONDUCT.md",
+    "AGENTS.md",
+    ".agent/",
+    "docs/"
   ],
   "os": [
     "darwin",

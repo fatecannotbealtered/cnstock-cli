@@ -30,6 +30,6 @@ Use this before a public release or major contract change.
 
 ## Skill
 
-- [ ] `skills/cnstock-cli/SKILL.md` declares `metadata.openclaw.requires.bins`; add `min_version` when assigning the release version.
+- [ ] `skills/cnstock-cli/SKILL.md` declares `metadata.requires.bins`; add `min_version` when assigning the release version.
 - [ ] The Skill points to `cnstock-cli reference` for params, schema, and error codes.
 - [ ] The Skill includes activation, non-activation, pre-flight, error handling, `_untrusted`, permission boundary, and 3-6 playbooks.

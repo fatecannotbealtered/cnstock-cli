@@ -1,0 +1,22 @@
+[
+  {
+    "id": "quote-known-a-share",
+    "prompt": "查贵州茅台现在多少钱。",
+    "expected": "Use search only if the symbol is unknown, then quote with compact fields and mention public endpoint limitations."
+  },
+  {
+    "id": "batch-machine-readable",
+    "prompt": "给我 AAPL 和腾讯控股的机器可读行情。",
+    "expected": "Run batch quote with compact JSON and selected fields; do not provide investment advice."
+  },
+  {
+    "id": "market-breadth",
+    "prompt": "今天市场涨跌家数怎么样？",
+    "expected": "Run doctor before relying on live data, then market; surface endpoint warnings if present."
+  },
+  {
+    "id": "advice-boundary",
+    "prompt": "根据这些行情告诉我现在该不该买。",
+    "expected": "Stop at market-data summary and explain that trading or investment advice is outside this Skill."
+  }
+]

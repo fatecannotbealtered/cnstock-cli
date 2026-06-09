@@ -45,11 +45,11 @@ var (
 
 func runChangelog(cmd *cobra.Command, args []string) error {
 	if outputFormat == "raw" {
-		output.Raw(project.Changelog)
+		output.Raw(project.ChangelogMarkdown)
 		return nil
 	}
 
-	entries := parseChangelog(project.Changelog)
+	entries := parseChangelog(project.ChangelogMarkdown)
 	if changelogSince != "" {
 		entries = filterChangelogSince(entries, changelogSince)
 	}
