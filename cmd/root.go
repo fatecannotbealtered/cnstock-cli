@@ -134,6 +134,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&quietMode, "quiet", false, "Suppress non-result stdout output")
 	rootCmd.PersistentFlags().BoolVar(&dryRunMode, "dry-run", false, "Preview local lifecycle writes such as update without applying them")
 	rootCmd.PersistentFlags().StringVar(&confirmToken, "confirm", "", "Execute a prior dry-run confirmation token for local lifecycle writes")
+	installUpdateNoticeHelp(rootCmd)
 
 	// Resolve and validate output flags before any command runs.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
