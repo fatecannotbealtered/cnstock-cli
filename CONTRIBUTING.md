@@ -33,6 +33,14 @@ go build -o bin/cnstock-cli ./cmd/cnstock-cli
 | Lint | `golangci-lint run ./...` (or `make lint` on Unix) |
 | Build with version | `make build` (Unix) or `go build -ldflags "-s -w -X github.com/fatecannotbealtered/cnstock-cli/cmd.version=dev" -o bin/cnstock-cli.exe ./cmd/cnstock-cli` (Windows) |
 
+## Functional contract coverage
+
+Release standard: **Functional Contract Coverage = 100%**. Every public behavior documented in README, Skill, `cnstock-cli reference`, `--help`, `context`, `doctor`, `changelog`, or `update` must have automated command-level tests.
+
+For each new or changed command, cover success, invalid arguments, config/auth/permission failure where applicable, upstream failure or timeout where applicable, JSON envelope shape, output schema, exit code, stdout/stderr boundary, and non-interactive behavior. Every bug fix that changes observable behavior needs a regression test.
+
+Numeric line coverage is tracked separately and may ratchet upward, but it does not replace missing contract tests.
+
 ## Pull requests
 
 1. **One logical change per PR** when possible.
