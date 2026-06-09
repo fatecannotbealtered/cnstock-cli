@@ -88,8 +88,10 @@ Endpoint override URLs may contain local proxy credentials or test tokens. `cont
 ## Supply chain
 
 - Release artifacts are built by GitHub Actions from git tags through GoReleaser.
-- The npm wrapper downloads release archives and verifies `checksums.txt`.
-- Installation fails if checksum verification is unavailable, the expected archive is missing from `checksums.txt`, or the checksum does not match.
+- npm installation uses the main wrapper package plus OS/CPU-specific optional platform packages; it does not download GitHub Release binaries at install time.
+- npm packages are published from the tagged GitHub Actions workflow with provenance; npm registry integrity and provenance cover the npm install path.
+- Standalone GitHub binary install/update paths verify release archives against `checksums.txt`.
+- Standalone install/update fails if checksum verification is unavailable, the expected archive is missing from `checksums.txt`, or the checksum does not match.
 - Releases sign `checksums.txt` with Sigstore/Cosign keyless signing from the tagged GitHub Actions release workflow and publish `checksums.txt.sigstore.json`.
 - Self-update results must sync the whole `skills/cnstock-cli/` directory or return a `skill_sync_command` equivalent to `npx skills add fatecannotbealtered/cnstock-cli -y -g`.
 - CI runs Go tests, vet, lint, and `npm audit --omit=dev --audit-level=high`.

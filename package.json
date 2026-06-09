@@ -28,11 +28,15 @@
   "bin": {
     "cnstock-cli": "scripts/run.js"
   },
-  "scripts": {
-    "postinstall": "node scripts/install.js"
+  "optionalDependencies": {
+    "@fatecannotbealtered-/cnstock-cli-darwin-arm64": "1.1.0",
+    "@fatecannotbealtered-/cnstock-cli-darwin-x64": "1.1.0",
+    "@fatecannotbealtered-/cnstock-cli-linux-arm64": "1.1.0",
+    "@fatecannotbealtered-/cnstock-cli-linux-x64": "1.1.0",
+    "@fatecannotbealtered-/cnstock-cli-win32-arm64": "1.1.0",
+    "@fatecannotbealtered-/cnstock-cli-win32-x64": "1.1.0"
   },
   "files": [
-    "scripts/install.js",
     "scripts/run.js",
     "skills/",
     "README.md",
@@ -47,15 +51,6 @@
     "AGENTS.md",
     ".agent/",
     "docs/"
-  ],
-  "os": [
-    "darwin",
-    "linux",
-    "win32"
-  ],
-  "cpu": [
-    "x64",
-    "arm64"
   ],
   "engines": {
     "node": ">=16"
