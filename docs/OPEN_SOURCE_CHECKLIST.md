@@ -18,6 +18,7 @@ Use this before a public release or major contract change.
 - [ ] `reference`, `context`, `doctor`, and `changelog` are present and current.
 - [ ] Exit codes match `reference.data.error_codes`.
 - [ ] `--fields` and `--compact` work for JSON output.
+- [ ] Functional Contract Coverage is 100%: public README, Skill, `reference`, `--help`, `context`, `doctor`, `changelog`, and `update` behavior has command-level tests.
 - [ ] Market-data read-only commands reject `--dry-run` and `--confirm` instead of silently ignoring them; `update` supports the dry-run/confirm lifecycle.
 
 ## Security
