@@ -1,22 +1,21 @@
-# Ensure consistent LF line endings across platforms
+# Keep repository text files LF-normalized on every platform.
 * text=auto eol=lf
 
-# Go source files
-*.go text eol=lf
-
-# Shell scripts always LF
-*.sh text eol=lf
-Makefile text eol=lf
-
-# Windows-specific files keep CRLF
+# Windows command scripts are intentionally CRLF.
 *.bat text eol=crlf
 *.cmd text eol=crlf
 
-# Binary files - no EOL conversion
+# Binary files.
 *.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
 *.png binary
 *.jpg binary
+*.jpeg binary
 *.gif binary
 *.ico binary
+*.pdf binary
 *.zip binary
 *.tar.gz binary
+*.tgz binary

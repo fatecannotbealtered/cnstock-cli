@@ -1,33 +1,34 @@
-# Build output
-bin/
-dist/
+# Common base — concatenate with template/<lang>/.gitignore
 
-# Node.js
 node_modules/
-
-# Windows executables
-*.exe
-
-# Go test cache
-*.test
-*.out
-coverage.txt
-
-# goreleaser
-.goreleaser-dist/
-
-# Editor / OS
-.DS_Store
+.env
+.env.local
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
+.DS_Store
 Thumbs.db
-
-# Environment
-.env
-.env.local
-
-# Claude Code worktrees
 .claude/
+
+# Go-specific — append to common/.gitignore
+
+# Build output
+bin/
+dist/
+
+# Windows executables
+*.exe
+
+# Go test cache / coverage
+*.test
+*.out
+coverage.txt
+coverage.out
+
+# goreleaser
+.goreleaser-dist/
+
+# Derived release artifact — must not be committed
+release-notes.md

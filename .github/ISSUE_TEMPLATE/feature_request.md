@@ -3,16 +3,26 @@ name: Feature Request
 about: Suggest a new feature or improvement
 title: "[Feature] "
 labels: enhancement
+assignees: ''
 ---
 
-## Description
+## Problem Statement
 
-A clear description of the feature you'd like.
+Describe the problem or limitation you are facing.
 
-## Use case
+## Proposed Solution
 
-Why do you need this? What problem does it solve?
+A clear description of what you want to happen.
 
-## Proposed solution
+## Alternatives Considered
 
-If you have a specific idea, describe it here.
+Any alternative solutions or workarounds you have considered.
+
+## Use Case
+
+Describe the specific use case or workflow this feature would support.
+
+## Additional Context
+
+- Links to relevant documentation
+- Examples from similar tools
