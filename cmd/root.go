@@ -63,7 +63,7 @@ var version = "dev"
 
 const (
 	riskTier            = "T0"
-	riskTierDescription = "read-only public market-data queries; no credentials; no external writes"
+	riskTierDescription = "read-only public market-data queries; update is local lifecycle write only; no credentials; no external writes"
 )
 
 // Output control (global flags).
@@ -78,9 +78,9 @@ var (
 	fieldsList []string
 	// quietMode suppresses non-result stdout output.
 	quietMode bool
-	// dryRunMode is reserved for write commands. cnstock-cli is currently read-only.
+	// dryRunMode previews local lifecycle writes; market-data commands reject it.
 	dryRunMode bool
-	// confirmToken is reserved for write commands. cnstock-cli is currently read-only.
+	// confirmToken executes a prior lifecycle dry-run; market-data commands reject it.
 	confirmToken string
 	// commandStartedAt is used for JSON envelope meta.duration_ms.
 	commandStartedAt time.Time
@@ -132,8 +132,8 @@ func init() {
 	rootCmd.PersistentFlags().StringSliceVar(&fieldsList, "fields", nil, "Restrict JSON data to these top-level fields (ordered, comma-separated)")
 	rootCmd.PersistentFlags().BoolVar(&jsonMode, "json", false, "Compatibility alias for --format json")
 	rootCmd.PersistentFlags().BoolVar(&quietMode, "quiet", false, "Suppress non-result stdout output")
-	rootCmd.PersistentFlags().BoolVar(&dryRunMode, "dry-run", false, "Reserved for write commands: preview changes without applying them")
-	rootCmd.PersistentFlags().StringVar(&confirmToken, "confirm", "", "Reserved for write commands: execute a prior dry-run confirmation token")
+	rootCmd.PersistentFlags().BoolVar(&dryRunMode, "dry-run", false, "Preview local lifecycle writes such as update without applying them")
+	rootCmd.PersistentFlags().StringVar(&confirmToken, "confirm", "", "Execute a prior dry-run confirmation token for local lifecycle writes")
 
 	// Resolve and validate output flags before any command runs.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
@@ -146,8 +146,8 @@ func init() {
 			return handleError(api.NewValidationError("format only supports json, text, raw"))
 		}
 		output.Quiet = quietMode
-		if flagChanged(cmd, "dry-run") || flagChanged(cmd, "confirm") {
-			return handleError(api.NewValidationError("cnstock-cli is read-only; --dry-run and --confirm are reserved for future write commands"))
+		if cmd.CommandPath() != "cnstock-cli update" && (flagChanged(cmd, "dry-run") || flagChanged(cmd, "confirm")) {
+			return handleError(api.NewValidationError("market-data commands are read-only; --dry-run and --confirm are only supported by update"))
 		}
 		return nil
 	}

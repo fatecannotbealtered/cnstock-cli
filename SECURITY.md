@@ -6,9 +6,10 @@ Security fixes are applied to the latest minor release on the default branch (`m
 
 ## Risk tier
 
-cnstock-cli is classified as **T0 low risk** under [.agent/SEC-SPEC.md](.agent/SEC-SPEC.md):
+cnstock-cli market-data usage is classified as **T0 low risk** under [.agent/SEC-SPEC.md](.agent/SEC-SPEC.md). `update` is a local lifecycle write command:
 
-- It is read-only.
+- Market-data and self-description commands are read-only.
+- `update` can replace the local package/binary and sync the whole Agent Skill directory after `--dry-run` and `--confirm`.
 - It requires no credentials, API keys, tokens, cookies, or local account setup.
 - It performs no external writes and has no permission escalation path.
 - Its worst-case impact is inaccurate, incomplete, unavailable, or misleading public market-data output from unofficial upstream web endpoints.
@@ -89,4 +90,6 @@ Endpoint override URLs may contain local proxy credentials or test tokens. `cont
 - Release artifacts are built by GitHub Actions from git tags through GoReleaser.
 - The npm wrapper downloads release archives and verifies `checksums.txt`.
 - Installation fails if checksum verification is unavailable, the expected archive is missing from `checksums.txt`, or the checksum does not match.
+- Releases sign `checksums.txt` with Sigstore/Cosign keyless signing from the tagged GitHub Actions release workflow and publish `checksums.txt.sigstore.json`.
+- Self-update results must sync the whole `skills/cnstock-cli/` directory or return a `skill_sync_command` equivalent to `npx skills add fatecannotbealtered/cnstock-cli -y -g`.
 - CI runs Go tests, vet, lint, and `npm audit --omit=dev --audit-level=high`.

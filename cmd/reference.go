@@ -136,15 +136,16 @@ func buildReference() referenceData {
 			ErrorEnvelope: `{"ok":false,"schema_version":"2.0","meta":{"duration_ms":0},"error":{"code":"E_VALIDATION","message":"...","details":{},"retryable":false}}`,
 		},
 		Permissions: []referencePermission{
-			{Tier: "read-only", Description: "All commands only read public web endpoints or local metadata; no credentials and no external writes.", Writable: false, Default: true},
+			{Tier: "read-only", Description: "Market-data and self-description commands only read public web endpoints or local metadata; no credentials and no external writes.", Writable: false, Default: true},
+			{Tier: "local-write", Description: "Local lifecycle update only: package/binary update and Agent Skill directory sync after dry-run/confirm.", Writable: true, Default: false},
 		},
 		GlobalFlags: []referenceFlag{
 			{Name: "--format", Type: "enum", Default: "json", Description: "Output format: json|text|raw."},
 			{Name: "--json", Type: "bool", Description: "Compatibility alias for --format json."},
 			{Name: "--fields", Type: "csv", Description: "For JSON output, keep only the listed top-level fields inside data."},
 			{Name: "--compact", Type: "bool", Description: "Emit compact single-line JSON."},
-			{Name: "--dry-run", Type: "bool", Description: "Reserved for future write commands; current read-only commands reject it."},
-			{Name: "--confirm", Type: "string", Description: "Reserved for future write commands; current read-only commands reject it."},
+			{Name: "--dry-run", Type: "bool", Description: "Preview local lifecycle writes such as update; market-data commands reject it."},
+			{Name: "--confirm", Type: "string", Description: "Execute a prior dry-run confirmation token for local lifecycle writes such as update."},
 			{Name: "--quiet", Type: "bool", Description: "Suppress non-result human output."},
 			{Name: "--version", Type: "bool", Description: "Print version."},
 			{Name: "--help", Type: "bool", Description: "Print help."},
@@ -177,8 +178,10 @@ func buildReference() referenceData {
 			{Path: "changelog", Type: "self-description", Description: "Version changes derived from CHANGELOG.md.", PermissionTier: "read-only", RawSupported: true, Pagination: "none", OutputSchema: "changelog", Params: []referenceParam{
 				{Name: "--since", Type: "semver", Description: "Only include entries newer than this version."},
 			}},
-			{Path: "update", Type: "query", Description: "Read-only latest release check with safe update instructions. Does not modify files.", PermissionTier: "read-only", RawSupported: true, Pagination: "none", OutputSchema: "update_report", Params: []referenceParam{
+			{Path: "update", Type: "write", Description: "Check, dry-run, and confirm a local package/binary update, then sync the whole Agent Skill directory.", PermissionTier: "local-write", RawSupported: true, Pagination: "none", OutputSchema: "update_report", Params: []referenceParam{
+				{Name: "--check", Type: "bool", Description: "Check for an available update without changing files."},
 				{Name: "--method", Type: "enum", Default: "auto", Description: "Preferred update method hint: auto|npm|go|github."},
+				{Name: "--target-version", Type: "semver", Description: "Install a specific version instead of the latest release."},
 			}},
 		},
 		Environment: []referenceEnv{
@@ -226,7 +229,7 @@ func buildReference() referenceData {
 			"search_result[]": {Shape: "array", Fields: []string{"symbol", "name", "market", "pinyin", "_untrusted"}, UntrustedFields: []string{"name", "pinyin"}},
 			"sector[]":        {Shape: "array", Fields: []string{"code", "name", "change_pct", "change", "price", "turnover", "volume", "turnover_rate", "advance_decline", "leading_stock", "_untrusted"}, UntrustedFields: []string{"name", "advance_decline", "leading_stock.name"}},
 			"market_stats":    {Shape: "object", Fields: []string{"advancing", "declining", "flat", "limit_up", "limit_down", "amount", "markets", "warnings"}, UntrustedFields: []string{"markets[].name"}},
-			"update_report":   {Shape: "object", Fields: []string{"current_version", "latest_version", "update_available", "install_method", "release_url", "recommended_action", "commands", "post_update_action", "notes"}},
+			"update_report":   {Shape: "object", Fields: []string{"current_version", "latest_version", "target_version", "status", "update_available", "install_method", "release_url", "recommended_action", "commands", "signature_status", "skill_sync_command", "skill_sync_status", "confirm_token", "expires_at", "preview", "post_update_action", "notes"}},
 			"changelog":       {Shape: "object", Fields: []string{"current_version", "since", "entries"}},
 			"context":         {Shape: "object", Fields: []string{"version", "go_version", "os", "arch", "environment", "account", "risk_tier", "risk_summary", "permission_tier", "default_format", "formats", "commands", "config", "credentials", "endpoints"}},
 			"doctor":          {Shape: "object", Fields: []string{"ok", "checked_at", "risk_tier", "checks", "endpoints"}},
@@ -261,11 +264,11 @@ func referenceMarkdown() string {
 | context | self-description | context |
 | doctor | self-description | doctor |
 | changelog | self-description | changelog |
-| update | query | update_report |
+| update | write | update_report |
 
 ## Permission Boundary
 
-cnstock-cli is T0/read-only. It requires no credentials and performs no external writes. ` + "`--dry-run`" + ` and ` + "`--confirm`" + ` are reserved for future write commands and are rejected by current commands.
+cnstock-cli market-data commands are T0/read-only: no credentials, no external writes, and no permission escalation path. ` + "`update`" + ` is the only local lifecycle write command; it may update the local package/binary and sync the whole Agent Skill directory, and therefore requires ` + "`--dry-run`" + ` followed by ` + "`--confirm <confirm_token>`" + `.
 
 ## Error Codes
 

@@ -18,11 +18,11 @@ Use this before a public release or major contract change.
 - [ ] `reference`, `context`, `doctor`, and `changelog` are present and current.
 - [ ] Exit codes match `reference.data.error_codes`.
 - [ ] `--fields` and `--compact` work for JSON output.
-- [ ] Current read-only commands reject `--dry-run` and `--confirm` instead of silently ignoring them.
+- [ ] Market-data read-only commands reject `--dry-run` and `--confirm` instead of silently ignoring them; `update` supports the dry-run/confirm lifecycle.
 
 ## Security
 
-- [ ] Risk tier is recorded as T0/read-only in `SECURITY.md` and `reference`.
+- [ ] T0 market-data risk and local-write update boundary are recorded in `SECURITY.md` and `reference`.
 - [ ] External text fields are tagged with `_untrusted`.
 - [ ] Endpoint URLs are redacted in `context` and `doctor`.
 - [ ] npm install verifies checksums and hard-fails if verification is unavailable or mismatched.
