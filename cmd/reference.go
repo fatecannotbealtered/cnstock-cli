@@ -19,19 +19,20 @@ func init() {
 }
 
 type referenceData struct {
-	Tool           string                         `json:"tool"`
-	Version        string                         `json:"version"`
-	SchemaVersion  string                         `json:"schema_version"`
-	RiskTier       string                         `json:"risk_tier"`
-	RiskSummary    string                         `json:"risk_summary"`
-	OutputContract referenceOutputContract        `json:"output_contract"`
-	Permissions    []referencePermission          `json:"permissions"`
-	GlobalFlags    []referenceFlag                `json:"global_flags"`
-	Commands       []referenceCommand             `json:"commands"`
-	Environment    []referenceEnv                 `json:"environment"`
-	ExitCodes      []referenceExitCode            `json:"exit_codes"`
-	ErrorCodes     []referenceErrorCode           `json:"error_codes"`
-	Schemas        map[string]referenceDataSchema `json:"schemas"`
+	Tool             string                         `json:"tool"`
+	Version          string                         `json:"version"`
+	SchemaVersion    string                         `json:"schema_version"`
+	RiskTier         string                         `json:"risk_tier"`
+	RiskSummary      string                         `json:"risk_summary"`
+	ReleaseReadiness releaseReadiness               `json:"release_readiness"`
+	OutputContract   referenceOutputContract        `json:"output_contract"`
+	Permissions      []referencePermission          `json:"permissions"`
+	GlobalFlags      []referenceFlag                `json:"global_flags"`
+	Commands         []referenceCommand             `json:"commands"`
+	Environment      []referenceEnv                 `json:"environment"`
+	ExitCodes        []referenceExitCode            `json:"exit_codes"`
+	ErrorCodes       []referenceErrorCode           `json:"error_codes"`
+	Schemas          map[string]referenceDataSchema `json:"schemas"`
 }
 
 type referenceOutputContract struct {
@@ -118,11 +119,12 @@ func runReference(cmd *cobra.Command, args []string) error {
 
 func buildReference() referenceData {
 	return referenceData{
-		Tool:          "cnstock-cli",
-		Version:       version,
-		SchemaVersion: output.SchemaVersion,
-		RiskTier:      riskTier,
-		RiskSummary:   riskTierDescription,
+		Tool:             "cnstock-cli",
+		Version:          version,
+		SchemaVersion:    output.SchemaVersion,
+		RiskTier:         riskTier,
+		RiskSummary:      riskTierDescription,
+		ReleaseReadiness: buildReleaseReadiness(),
 		OutputContract: referenceOutputContract{
 			Stdout:        "In json mode, stdout is exactly one valid JSON document; raw mode is unwrapped passthrough.",
 			Stderr:        "Diagnostics and JSON error envelopes are emitted on stderr.",
@@ -233,7 +235,7 @@ func buildReference() referenceData {
 			"changelog":       {Shape: "object", Fields: []string{"current_version", "since", "entries"}},
 			"context":         {Shape: "object", Fields: []string{"version", "go_version", "os", "arch", "environment", "account", "risk_tier", "risk_summary", "permission_tier", "default_format", "formats", "commands", "config", "credentials", "endpoints"}},
 			"doctor":          {Shape: "object", Fields: []string{"ok", "checked_at", "risk_tier", "checks", "endpoints"}},
-			"reference":       {Shape: "object", Fields: []string{"tool", "version", "schema_version", "risk_tier", "risk_summary", "output_contract", "permissions", "global_flags", "commands", "environment", "exit_codes", "error_codes", "schemas"}},
+			"reference":       {Shape: "object", Fields: []string{"tool", "version", "schema_version", "risk_tier", "risk_summary", "release_readiness", "output_contract", "permissions", "global_flags", "commands", "environment", "exit_codes", "error_codes", "schemas"}},
 		},
 	}
 }

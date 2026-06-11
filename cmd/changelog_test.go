@@ -60,6 +60,12 @@ func TestBuildReferenceSpecContract(t *testing.T) {
 	if ref.RiskTier != riskTier || len(ref.Permissions) == 0 || ref.Permissions[0].Writable {
 		t.Fatalf("reference should declare read-only risk boundary: %+v", ref)
 	}
+	if ref.ReleaseReadiness.Level != "beta" {
+		t.Fatalf("release level = %q, want beta", ref.ReleaseReadiness.Level)
+	}
+	if ref.ReleaseReadiness.LiveSmokeStatus != "missing" {
+		t.Fatalf("live smoke status = %q, want missing", ref.ReleaseReadiness.LiveSmokeStatus)
+	}
 
 	hasChangelog := false
 	for _, c := range ref.Commands {
@@ -82,5 +88,18 @@ func TestBuildReferenceSpecContract(t *testing.T) {
 	}
 	if !hasValidation {
 		t.Fatal("reference should include E_VALIDATION exit-code mapping")
+	}
+}
+
+func TestReleaseReadinessDoctorContract(t *testing.T) {
+	readiness := buildReleaseReadiness()
+	if readiness.Level != "beta" || readiness.LiveSmokeStatus != "missing" {
+		t.Fatalf("unexpected readiness: %+v", readiness)
+	}
+	if releaseReadinessCheckStatus() != "warn" {
+		t.Fatalf("release readiness doctor status = %q, want warn", releaseReadinessCheckStatus())
+	}
+	if releaseReadinessCheckFix() == "" {
+		t.Fatal("beta release readiness should include a fix")
 	}
 }
