@@ -59,6 +59,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		doctorCheck{Check: "credentials", Status: "pass"},
 		doctorCheck{Check: "permissions", Status: "pass"},
 		versionCheck,
+		doctorCheck{Check: "release_readiness", Status: releaseReadinessCheckStatus(), Fix: releaseReadinessCheckFix()},
 	)
 	networkFailed := false
 	for _, t := range api.ProbeTargets() {

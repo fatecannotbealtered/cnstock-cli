@@ -12,3 +12,4 @@ Hard rules for this repo:
 - Keep `README.md`, `README_zh.md`, `CHANGELOG.md`, and `skills/cnstock-cli/SKILL.md` in sync when behavior changes.
 - Run `go test ./...` before handing off changes. Use `go test -race ./...` when a C compiler is available.
 - Before release, Functional Contract Coverage must remain 100%: every public README / Skill / reference / help / context / doctor / changelog / update behavior needs command-level tests.
+- Release readiness must be explicit: `reference.release_readiness` and `doctor` declare `stable`, `beta`, or `unpublishable`; `stable` requires recorded live smoke/E2E evidence.
