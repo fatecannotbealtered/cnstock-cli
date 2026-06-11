@@ -189,7 +189,7 @@ func PrintErrorEnvelopeWithDuration(msg string, code ErrorCode, retryable bool, 
 			Retryable: retryable,
 		},
 	}
-	writeJSON(os.Stderr, payload, compact)
+	writeJSON(os.Stdout, payload, compact)
 }
 
 func writeJSON(w io.Writer, v any, compact bool) {
@@ -203,7 +203,7 @@ func writeJSON(w io.Writer, v any, compact bool) {
 		data, err = json.MarshalIndent(v, "", "  ")
 	}
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, `{"ok":false,"schema_version":%q,"meta":{"duration_ms":0},"error":{"code":%q,"message":%q,"details":{},"retryable":false}}`+"\n", SchemaVersion, ErrUnknown, err.Error())
+		_, _ = fmt.Fprintf(os.Stdout, `{"ok":false,"schema_version":%q,"meta":{"duration_ms":0},"error":{"code":%q,"message":%q,"details":{},"retryable":false}}`+"\n", SchemaVersion, ErrUnknown, err.Error())
 		return
 	}
 	_, _ = fmt.Fprintln(w, string(data))

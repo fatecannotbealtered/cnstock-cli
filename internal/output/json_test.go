@@ -43,7 +43,7 @@ func TestPrintJSON(t *testing.T) {
 }
 
 func TestPrintErrorJSON(t *testing.T) {
-	output := captureStderr(func() {
+	output := captureStdout(func() {
 		PrintErrorJSON("something failed")
 	})
 
@@ -63,7 +63,7 @@ func TestPrintErrorJSON(t *testing.T) {
 }
 
 func TestPrintErrorJSONWithCode(t *testing.T) {
-	output := captureStderr(func() {
+	output := captureStdout(func() {
 		PrintErrorJSONWithCode("bad args", 0, ErrValidation)
 	})
 
@@ -86,7 +86,7 @@ func TestPrintErrorJSONWithCode(t *testing.T) {
 }
 
 func TestPrintErrorJSONWithCodeNetwork(t *testing.T) {
-	output := captureStderr(func() {
+	output := captureStdout(func() {
 		PrintErrorJSONWithCode("timeout", 0, ErrNetwork)
 	})
 
@@ -103,7 +103,7 @@ func TestPrintErrorJSONWithCodeNetwork(t *testing.T) {
 }
 
 func TestPrintErrorJSONWithCodeServer(t *testing.T) {
-	output := captureStderr(func() {
+	output := captureStdout(func() {
 		PrintErrorJSONWithCode("internal error", 0, ErrServer)
 	})
 
@@ -113,7 +113,7 @@ func TestPrintErrorJSONWithCodeServer(t *testing.T) {
 }
 
 func TestPrintErrorJSONWithCodeNotFound(t *testing.T) {
-	output := captureStderr(func() {
+	output := captureStdout(func() {
 		PrintErrorJSONWithCode("symbol not found", 0, ErrNotFound)
 	})
 

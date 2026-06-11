@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -395,7 +394,7 @@ func runUpdateSkillSync(ctx context.Context, repo string) error {
 
 func issueUpdateConfirmToken(payload updateConfirmPayload) string {
 	data, _ := json.Marshal(payload)
-	sum := sha256.Sum256(data)
+	sum := confirmDigest32(data)
 	return "ct_" + base64.RawURLEncoding.EncodeToString(data) + "." + hex.EncodeToString(sum[:])
 }
 
@@ -413,7 +412,7 @@ func validateUpdateConfirmToken(token, method, target, command, skillCommand str
 	if err != nil {
 		return empty, fmt.Errorf("confirmation token is invalid; re-run with --dry-run")
 	}
-	sum := sha256.Sum256(data)
+	sum := confirmDigest32(data)
 	if !strings.EqualFold(parts[1], hex.EncodeToString(sum[:])) {
 		return empty, fmt.Errorf("confirmation token is invalid; re-run with --dry-run")
 	}
