@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-
 func TestPrintJSON(t *testing.T) {
 	type sample struct {
 		Name  string `json:"name"`
