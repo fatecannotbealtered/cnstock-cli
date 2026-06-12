@@ -54,10 +54,8 @@ func TestParseOptionalFloat(t *testing.T) {
 			if *got != tt.want {
 				t.Errorf("parseOptionalFloat(%q) = %f, want %f", tt.input, *got, tt.want)
 			}
-		} else {
-			if got != nil {
-				t.Errorf("parseOptionalFloat(%q) = %f, want nil", tt.input, *got)
-			}
+		} else if got != nil {
+			t.Errorf("parseOptionalFloat(%q) = %f, want nil", tt.input, *got)
 		}
 	}
 }
