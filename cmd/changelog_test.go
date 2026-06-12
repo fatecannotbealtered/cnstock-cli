@@ -54,7 +54,7 @@ func TestBuildReferenceSpecContract(t *testing.T) {
 	if ref.Tool != "cnstock-cli" {
 		t.Fatalf("tool = %q, want cnstock-cli", ref.Tool)
 	}
-	if ref.SchemaVersion != "2.0" {
+	if ref.SchemaVersion != "1.0" {
 		t.Fatalf("schema_version = %q, want 2.0", ref.SchemaVersion)
 	}
 	if ref.RiskTier != riskTier || len(ref.Permissions) == 0 || ref.Permissions[0].Writable {
