@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- FCC enumeration guard (`TestFCC_EveryLeafCommandHasTest`): enumerates every leaf command from live `reference` output and asserts each has a command-level test; skips while `fcc_status` is honestly declared non-verified, so the claim cannot be flipped without coverage.
+- Command-level e2e tests for `sectors` (mock rank endpoint, `_untrusted` tagging, E_VALIDATION path), `market` (mock breadth/limit pools, upstream-500 path), and `doctor` (all probe targets mocked, release_readiness check asserted) — the three leaves the guard found uncovered.
 - **`changelog` command**: Emits version changes derived from `CHANGELOG.md`, with `--since <version>` for agent knowledge refresh after updates.
 - **Agent-native repository entrypoints**: Added `AGENTS.md`, `NOTICE.md`, `CODE_OF_CONDUCT.md`, compatibility notes, E2E notes, and an open-source checklist aligned with `.agent/` specs.
 - **Security self-description**: `reference`, `context`, and `doctor` now declare the T0 market-data boundary, local-write update boundary, credential status, and version readiness.

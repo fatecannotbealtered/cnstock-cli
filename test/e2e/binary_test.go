@@ -209,11 +209,12 @@ func decodeData(t *testing.T, stdout string, out any) jsonEnvelope {
 	return env
 }
 
-func decodeError(t *testing.T, stderr string) jsonEnvelope {
+// decodeError parses the failure envelope from stdout (CLI-SPEC §4).
+func decodeError(t *testing.T, stdout string) jsonEnvelope {
 	t.Helper()
 	var env jsonEnvelope
-	if err := json.Unmarshal([]byte(stderr), &env); err != nil {
-		t.Fatalf("invalid JSON error envelope: %v\nstderr: %s", err, stderr)
+	if err := json.Unmarshal([]byte(stdout), &env); err != nil {
+		t.Fatalf("invalid JSON error envelope: %v\nstdout: %s", err, stdout)
 	}
 	if env.OK || env.Error == nil {
 		t.Fatalf("expected ok=false error envelope, got: %+v", env)
@@ -380,7 +381,7 @@ func TestBinary_SearchEmptyKeyword(t *testing.T) {
 	if r.ExitCode != 2 {
 		t.Errorf("exit code = %d, want 2 (validation error); stderr: %s", r.ExitCode, r.Stderr)
 	}
-	env := decodeError(t, r.Stderr)
+	env := decodeError(t, r.Stdout)
 	if env.Error.Code != "E_VALIDATION" || env.Error.Retryable {
 		t.Errorf("error = %+v, want E_VALIDATION retryable=false", env.Error)
 	}
@@ -415,7 +416,7 @@ func TestBinary_KlineInvalidLimit(t *testing.T) {
 	if r.ExitCode != 2 {
 		t.Errorf("exit code = %d, want 2 (validation error); stderr: %s", r.ExitCode, r.Stderr)
 	}
-	env := decodeError(t, r.Stderr)
+	env := decodeError(t, r.Stdout)
 	if env.Error.Code != "E_VALIDATION" || env.Error.Retryable {
 		t.Errorf("error = %+v, want E_VALIDATION retryable=false", env.Error)
 	}
@@ -427,7 +428,7 @@ func TestBinary_KlineInvalidAdj(t *testing.T) {
 	if r.ExitCode != 2 {
 		t.Errorf("exit code = %d, want 2 (validation error); stderr: %s", r.ExitCode, r.Stderr)
 	}
-	env := decodeError(t, r.Stderr)
+	env := decodeError(t, r.Stdout)
 	if env.Error.Code != "E_VALIDATION" || env.Error.Retryable {
 		t.Errorf("error = %+v, want E_VALIDATION retryable=false", env.Error)
 	}
@@ -441,7 +442,7 @@ func TestBinary_NetworkError(t *testing.T) {
 	if r.ExitCode != 7 {
 		t.Errorf("exit code = %d, want 7 (network error); stderr: %s", r.ExitCode, r.Stderr)
 	}
-	env := decodeError(t, r.Stderr)
+	env := decodeError(t, r.Stdout)
 	if env.Error.Code != "E_NETWORK" || !env.Error.Retryable {
 		t.Errorf("error = %+v, want E_NETWORK retryable=true", env.Error)
 	}
@@ -558,7 +559,7 @@ func TestBinary_InvalidFormat(t *testing.T) {
 	if r.ExitCode != 2 {
 		t.Errorf("exit code = %d, want 2; stderr: %s", r.ExitCode, r.Stderr)
 	}
-	env := decodeError(t, r.Stderr)
+	env := decodeError(t, r.Stdout)
 	if env.Error.Code != "E_VALIDATION" {
 		t.Errorf("error code = %s, want E_VALIDATION", env.Error.Code)
 	}
@@ -570,7 +571,7 @@ func TestBinary_DryRunRejectedForReadOnlyCommand(t *testing.T) {
 	if r.ExitCode != 2 {
 		t.Errorf("exit code = %d, want 2; stderr: %s", r.ExitCode, r.Stderr)
 	}
-	env := decodeError(t, r.Stderr)
+	env := decodeError(t, r.Stdout)
 	if env.Error.Code != "E_VALIDATION" {
 		t.Errorf("error code = %s, want E_VALIDATION", env.Error.Code)
 	}
