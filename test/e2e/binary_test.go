@@ -20,7 +20,6 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic("failed to create temp dir: " + err.Error())
 	}
-	defer func() { _ = os.RemoveAll(dir) }()
 
 	name := "cnstock-cli"
 	if runtime.GOOS == "windows" {
@@ -35,7 +34,9 @@ func TestMain(m *testing.M) {
 		panic("failed to build binary: " + err.Error())
 	}
 
-	os.Exit(m.Run())
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+	os.Exit(code)
 }
 
 // findProjectRoot walks up from the test file directory to find go.mod.
@@ -258,7 +259,6 @@ func runBinary(env map[string]string, args ...string) cmdResult {
 
 func TestBinary_QuoteJSON(t *testing.T) {
 	server := mockQuoteServer()
-	defer server.Close()
 
 	r := runBinary(map[string]string{
 		"CNS_QUOTE_ENDPOINT": server.URL + "/q=%s",
@@ -287,7 +287,6 @@ func TestBinary_QuoteJSON(t *testing.T) {
 
 func TestBinary_QuoteBatchJSON(t *testing.T) {
 	server := mockQuoteServer()
-	defer server.Close()
 
 	// The mock only returns sh600519 data. sz000858 gets a "not returned" entry.
 	r := runBinary(map[string]string{
@@ -308,7 +307,6 @@ func TestBinary_QuoteBatchJSON(t *testing.T) {
 
 func TestBinary_KlineJSON(t *testing.T) {
 	server := mockKlineServer()
-	defer server.Close()
 
 	r := runBinary(map[string]string{
 		"CNS_KLINE_ENDPOINT": server.URL + "/appstock/app/%s/get?param=%s",
@@ -330,7 +328,6 @@ func TestBinary_KlineJSON(t *testing.T) {
 
 func TestBinary_MinuteJSON(t *testing.T) {
 	server := mockMinuteServer()
-	defer server.Close()
 
 	r := runBinary(map[string]string{
 		"CNS_MINUTE_ENDPOINT": server.URL + "/minute/query?code=%s",
@@ -352,7 +349,6 @@ func TestBinary_MinuteJSON(t *testing.T) {
 
 func TestBinary_SearchJSON(t *testing.T) {
 	server := mockSearchServer()
-	defer server.Close()
 
 	r := runBinary(map[string]string{
 		"CNS_SEARCH_ENDPOINT": server.URL + "/s3/?v=2&q=%s&t=all&c=1",
@@ -391,7 +387,6 @@ func TestBinary_QuoteNoData(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`v_sh999999="";`))
 	}))
-	defer server.Close()
 
 	r := runBinary(map[string]string{
 		"CNS_QUOTE_ENDPOINT": server.URL + "/q=%s",
@@ -489,7 +484,6 @@ func TestBinary_Reference(t *testing.T) {
 
 func TestBinary_DefaultFormatIsJSON(t *testing.T) {
 	server := mockQuoteServer()
-	defer server.Close()
 
 	// No --json / --format flag: default output must be JSON.
 	r := runBinary(map[string]string{
@@ -505,7 +499,6 @@ func TestBinary_DefaultFormatIsJSON(t *testing.T) {
 
 func TestBinary_FieldsAndCompact(t *testing.T) {
 	server := mockQuoteServer()
-	defer server.Close()
 
 	r := runBinary(map[string]string{
 		"CNS_QUOTE_ENDPOINT": server.URL + "/q=%s",
@@ -536,7 +529,6 @@ func TestBinary_FieldsAndCompact(t *testing.T) {
 
 func TestBinary_FormatText(t *testing.T) {
 	server := mockQuoteServer()
-	defer server.Close()
 
 	r := runBinary(map[string]string{
 		"CNS_QUOTE_ENDPOINT": server.URL + "/q=%s",
@@ -614,7 +606,6 @@ func TestBinary_Context(t *testing.T) {
 
 func TestBinary_QuietMode(t *testing.T) {
 	server := mockQuoteServer()
-	defer server.Close()
 
 	r := runBinary(map[string]string{
 		"CNS_QUOTE_ENDPOINT": server.URL + "/q=%s",

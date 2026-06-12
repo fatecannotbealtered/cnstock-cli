@@ -1,28 +1,12 @@
 package output
 
 import (
-	"bytes"
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 	"time"
 )
 
-func captureStderr(fn func()) string {
-	old := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
-
-	fn()
-
-	_ = w.Close()
-	os.Stderr = old
-
-	var buf bytes.Buffer
-	_, _ = buf.ReadFrom(r)
-	return buf.String()
-}
 
 func TestPrintJSON(t *testing.T) {
 	type sample struct {

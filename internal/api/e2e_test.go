@@ -205,10 +205,8 @@ func TestE2E_QuoteSingleAStock(t *testing.T) {
 	}
 	if len(q.Ask) != 5 {
 		t.Errorf("ask depth = %d levels, want 5", len(q.Ask))
-	} else {
-		if q.Ask[0].Price == nil || *q.Ask[0].Price != 1800.10 {
-			t.Errorf("ask[0].price = %v, want 1800.10", q.Ask[0].Price)
-		}
+	} else if q.Ask[0].Price == nil || *q.Ask[0].Price != 1800.10 {
+		t.Errorf("ask[0].price = %v, want 1800.10", q.Ask[0].Price)
 	}
 }
 
