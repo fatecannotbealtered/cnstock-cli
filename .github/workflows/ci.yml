@@ -119,13 +119,12 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Build
-        run: go build -o cnstock-cli ./cmd/cnstock-cli
-
-      - name: Smoke test (Unix)
-        if: runner.os != 'Windows'
-        run: ./cnstock-cli --help
-
-      - name: Smoke test (Windows)
-        if: runner.os == 'Windows'
-        run: ./cnstock-cli.exe --help
+      - name: Build and smoke test
+        # explicit -o never appends .exe, so name the output per-OS;
+        # bash keeps one step working across all three runners
+        shell: bash
+        run: |
+          BIN=cnstock-cli
+          [ "$RUNNER_OS" = "Windows" ] && BIN=cnstock-cli.exe
+          go build -o "$BIN" ./cmd/cnstock-cli
+          "./$BIN" --help
