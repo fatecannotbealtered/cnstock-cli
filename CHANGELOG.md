@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - In JSON mode the failure envelope is now the single JSON document on stdout, matching CLI-SPEC §4; stderr stays a human-readable side channel.
 - Synced the `.agent/` spec copies from the ai-native-cli-spec template: stdout failure envelope (§4), HMAC confirm-token requirement (§7), signature_status/signature_verified fields (§14), Skill frontmatter `version` rule.
 - Unified the golangci-lint v2 toolchain: Makefile installs from the `/v2` module path and CI uses `golangci-lint-action@v8` to match the v2 config format.
-- **Schema version 2.0**: JSON output now uses `schema_version:"2.0"` because the machine contract changed.
+- **Schema version stays 1.0**: the machine contract was reshaped pre-release; with no published consumers, the first public contract starts at `1.0`.
 - **Error taxonomy**: Validation failures now use `E_VALIDATION` instead of `E_BAD_ARGS`; error envelopes include `meta.duration_ms`.
 - **Reference contract**: `reference` now reports command params, output schemas, permission tier, risk tier, global write-confirmation flags, and `_untrusted` fields as the machine truth source.
 - **Local lifecycle writes**: market-data commands still reject `--dry-run` and `--confirm`; `update` uses them to preview and confirm self-update plus whole Skill directory sync through `npx skills add fatecannotbealtered/cnstock-cli -y -g`.

@@ -197,7 +197,7 @@ func decodeData(t *testing.T, stdout string, out any) jsonEnvelope {
 	if !env.OK {
 		t.Fatalf("expected ok=true envelope, got: %+v", env)
 	}
-	if env.SchemaVersion != "2.0" {
+	if env.SchemaVersion != "1.0" {
 		t.Fatalf("schema_version = %q, want 2.0", env.SchemaVersion)
 	}
 	if len(env.Data) == 0 {
@@ -219,7 +219,7 @@ func decodeError(t *testing.T, stdout string) jsonEnvelope {
 	if env.OK || env.Error == nil {
 		t.Fatalf("expected ok=false error envelope, got: %+v", env)
 	}
-	if env.SchemaVersion != "2.0" {
+	if env.SchemaVersion != "1.0" {
 		t.Fatalf("schema_version = %q, want 2.0", env.SchemaVersion)
 	}
 	if _, ok := env.Meta["duration_ms"]; !ok {

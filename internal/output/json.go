@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const SchemaVersion = "2.0"
+const SchemaVersion = "1.0"
 
 // Envelope is the stable machine-readable response wrapper for JSON output.
 type Envelope struct {
