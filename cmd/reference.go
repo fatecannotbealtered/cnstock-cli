@@ -126,8 +126,8 @@ func buildReference() referenceData {
 		RiskSummary:      riskTierDescription,
 		ReleaseReadiness: buildReleaseReadiness(),
 		OutputContract: referenceOutputContract{
-			Stdout:        "In json mode, stdout is exactly one valid JSON document; raw mode is unwrapped passthrough.",
-			Stderr:        "Diagnostics and JSON error envelopes are emitted on stderr.",
+			Stdout:        "In json mode, stdout is exactly one valid JSON document, including the failure envelope on error; raw mode is unwrapped passthrough. Agents always parse stdout and check ok.",
+			Stderr:        "Human-readable diagnostics and warnings only; never the JSON envelope. Agents never need to scrape stderr.",
 			DefaultFormat: "json",
 			Formats: map[string]string{
 				"json": "Structured envelope for agents.",
@@ -245,8 +245,8 @@ func referenceMarkdown() string {
 
 ## Output Contract
 
-- stdout: in json mode, exactly one valid JSON document.
-- stderr: diagnostics and JSON error envelopes.
+- stdout: in json mode, exactly one valid JSON document, including the failure envelope on error.
+- stderr: human-readable diagnostics and warnings only; never the JSON envelope.
 - Default format: ` + "`json`" + `.
 - Success envelope: ` + "`" + `{"ok":true,"schema_version":"1.0","data":{},"meta":{"duration_ms":0}}` + "`" + `.
 - Failure envelope: ` + "`" + `{"ok":false,"schema_version":"1.0","meta":{"duration_ms":0},"error":{"code":"E_VALIDATION","message":"...","details":{},"retryable":false}}` + "`" + `.

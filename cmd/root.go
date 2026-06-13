@@ -22,6 +22,18 @@ func classifyError(err error) (output.ErrorCode, int, bool) {
 	if errors.As(err, &notFoundErr) {
 		return output.ErrNotFound, ExitNotFound, false
 	}
+	var rateLimitErr *api.RateLimitError
+	if errors.As(err, &rateLimitErr) {
+		return output.ErrRateLimit, ExitRateLimit, true
+	}
+	var authErr *api.AuthError
+	if errors.As(err, &authErr) {
+		return output.ErrAuth, ExitAuth, false
+	}
+	var forbiddenErr *api.ForbiddenError
+	if errors.As(err, &forbiddenErr) {
+		return output.ErrForbidden, ExitForbidden, false
+	}
 	var serverErr *api.ServerError
 	if errors.As(err, &serverErr) {
 		return output.ErrServer, ExitTransient, true

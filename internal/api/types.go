@@ -30,6 +30,27 @@ type NotFoundError struct {
 
 func (e *NotFoundError) Error() string { return e.Msg }
 
+// RateLimitError indicates the upstream throttled the request (HTTP 429).
+type RateLimitError struct {
+	Msg string
+}
+
+func (e *RateLimitError) Error() string { return e.Msg }
+
+// AuthError indicates the upstream rejected the request as unauthenticated (HTTP 401).
+type AuthError struct {
+	Msg string
+}
+
+func (e *AuthError) Error() string { return e.Msg }
+
+// ForbiddenError indicates the upstream refused the request (HTTP 403).
+type ForbiddenError struct {
+	Msg string
+}
+
+func (e *ForbiddenError) Error() string { return e.Msg }
+
 // newValidationError creates a ValidationError.
 func newValidationError(format string, args ...any) error {
 	return &ValidationError{Msg: fmt.Sprintf(format, args...)}
@@ -63,6 +84,21 @@ func NewNetworkError(format string, args ...any) error {
 // newNotFoundError creates a NotFoundError.
 func newNotFoundError(format string, args ...any) error {
 	return &NotFoundError{Msg: fmt.Sprintf(format, args...)}
+}
+
+// newRateLimitError creates a RateLimitError.
+func newRateLimitError(format string, args ...any) error {
+	return &RateLimitError{Msg: fmt.Sprintf(format, args...)}
+}
+
+// newAuthError creates an AuthError.
+func newAuthError(format string, args ...any) error {
+	return &AuthError{Msg: fmt.Sprintf(format, args...)}
+}
+
+// newForbiddenError creates a ForbiddenError.
+func newForbiddenError(format string, args ...any) error {
+	return &ForbiddenError{Msg: fmt.Sprintf(format, args...)}
 }
 
 // Quote represents a real-time stock quote.

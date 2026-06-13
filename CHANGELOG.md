@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Upstream HTTP client-error statuses now map onto the error taxonomy so an agent can distinguish failure modes via `error.code` + `retryable`: 404 → `E_NOT_FOUND`, 429 → `E_RATE_LIMITED` (retryable), 401 → `E_AUTH`, 403 → `E_FORBIDDEN`, 5xx → `E_SERVER` (retryable). Previously every 4xx collapsed to `E_NETWORK`.
+
+### Fixed
+
+- Corrected the `reference` output-contract and code docstrings to match the actual (and spec-mandated) behavior: the JSON failure envelope is emitted on **stdout** (the single document agents parse), not stderr. No runtime behavior changed — only the self-description was wrong.
+
 ## [1.1.1] - 2026-06-13
 
 ### Added

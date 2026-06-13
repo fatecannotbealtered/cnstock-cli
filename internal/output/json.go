@@ -152,7 +152,8 @@ const (
 	ErrUnknown    ErrorCode = "E_UNKNOWN"
 )
 
-// PrintErrorJSON outputs an error envelope to stderr.
+// PrintErrorJSON outputs an error envelope to stdout (the failure envelope is
+// the single JSON document agents parse; see CLI-SPEC §4).
 func PrintErrorJSON(msg string) {
 	PrintErrorEnvelope(msg, ErrUnknown, false, nil, false)
 }
@@ -166,12 +167,12 @@ func PrintErrorJSONWithCode(msg string, statusCode int, code ErrorCode) {
 	PrintErrorEnvelope(msg, code, isRetryable(code), details, false)
 }
 
-// PrintErrorEnvelope outputs a JSON error envelope to stderr.
+// PrintErrorEnvelope outputs a JSON error envelope to stdout.
 func PrintErrorEnvelope(msg string, code ErrorCode, retryable bool, details map[string]any, compact bool) {
 	PrintErrorEnvelopeWithDuration(msg, code, retryable, details, compact, 0)
 }
 
-// PrintErrorEnvelopeWithDuration outputs a JSON error envelope to stderr with
+// PrintErrorEnvelopeWithDuration outputs a JSON error envelope to stdout with
 // execution metadata. Error envelopes intentionally mirror success envelopes so
 // agents can always inspect ok/schema_version/meta first.
 func PrintErrorEnvelopeWithDuration(msg string, code ErrorCode, retryable bool, details map[string]any, compact bool, duration time.Duration) {
