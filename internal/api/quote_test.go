@@ -45,6 +45,23 @@ func TestParseQuoteResponseNoData(t *testing.T) {
 	}
 }
 
+// Tencent returns a v_pv_none_match sentinel line when a query matches nothing;
+// it must not leak into results as a phantom quote (found via live smoke).
+func TestParseQuoteResponseNoneMatchSentinel(t *testing.T) {
+	text := `v_pv_none_match="1~~~";v_usZZZ999="";`
+	normalized := []string{"usZZZ999"}
+
+	results := parseQuoteResponse(text, normalized)
+	for _, r := range results {
+		if r.Symbol == "pv_none_match" {
+			t.Fatalf("pv_none_match sentinel leaked as a phantom quote: %+v", results)
+		}
+	}
+	if len(results) != 1 || results[0].Symbol != "usZZZ999" {
+		t.Fatalf("expected only the requested symbol, got %+v", results)
+	}
+}
+
 func TestParseQuoteResponseMissing(t *testing.T) {
 	text := ``
 	normalized := []string{"sh600519"}
