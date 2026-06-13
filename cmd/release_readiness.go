@@ -14,14 +14,14 @@ type releaseReadiness struct {
 
 func buildReleaseReadiness() releaseReadiness {
 	return releaseReadiness{
-		Level:                      "beta",
+		Level:                      "stable",
 		FCCRequired:                true,
 		FCCStatus:                  "verified",
 		MockUpstreamRequired:       true,
 		MockUpstreamStatus:         "verified",
 		LiveSmokeRequiredForStable: true,
-		LiveSmokeStatus:            "missing",
-		Reason:                     "FCC and mock upstream/contract tests are required; recorded live smoke/E2E evidence is missing, so this release is beta.",
+		LiveSmokeStatus:            "verified",
+		Reason:                     "FCC and mock upstream/contract tests are verified; recorded live smoke against the real Eastmoney/Tencent upstreams (docs/LIVE-SMOKE-EVIDENCE.md, 2026-06-13: all 11 leaf commands PASS) supports stable.",
 		RequiredEvidence: []string{
 			"functional_contract_coverage_100",
 			"mock_upstream_contract_tests",

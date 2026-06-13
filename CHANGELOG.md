@@ -5,10 +5,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.1] - 2026-06-13
 
 ### Added
 
+- Recorded live smoke against the real Eastmoney/Tencent upstreams (`docs/LIVE-SMOKE-EVIDENCE.md`, 2026-06-13: all 11 leaf commands PASS); `release_readiness` is now `stable` with `live_smoke_status: verified`.
 - FCC enumeration guard (`TestFCC_EveryLeafCommandHasTest`): enumerates every leaf command from live `reference` output and asserts each has a command-level test; skips while `fcc_status` is honestly declared non-verified, so the claim cannot be flipped without coverage.
 - Command-level e2e tests for `sectors` (mock rank endpoint, `_untrusted` tagging, E_VALIDATION path), `market` (mock breadth/limit pools, upstream-500 path), and `doctor` (all probe targets mocked, release_readiness check asserted) — the three leaves the guard found uncovered.
 - **`changelog` command**: Emits version changes derived from `CHANGELOG.md`, with `--since <version>` for agent knowledge refresh after updates.
@@ -37,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **npm install integrity**: `scripts/install.js` now hard-fails when checksum verification is unavailable or the archive is missing from `checksums.txt`.
 - **Signed release checksums**: Release checksums are signed with Sigstore/Cosign, and install/update paths report signature verification status separately from checksum verification.
 - **Supply-chain gate**: CI and release workflows now run `npm audit --omit=dev --audit-level=high`.
+
+### Fixed
+
+- `quote` surfaced a phantom `{"symbol":"pv_none_match"}` row when a query matched nothing: Tencent's `v_pv_none_match` sentinel rides in the symbol field, but the parser guard only checked the data field. Now dropped, with a regression test. Found by live smoke against the real Tencent endpoint.
 
 
 ## [1.1.0] - 2026-06-07

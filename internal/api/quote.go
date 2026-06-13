@@ -58,6 +58,12 @@ func parseQuoteResponse(text string, normalized []string) []Quote {
 
 		symbol := match[1]
 		data := match[2]
+		// Tencent emits a sentinel line `v_pv_none_match="1~..."` when a query
+		// matches nothing; the symbol (not the data) carries the marker, so it
+		// must be dropped here or it surfaces as a phantom quote row.
+		if symbol == "pv_none_match" {
+			continue
+		}
 		// Match the response symbol against our requested list case-insensitively
 		// (Tencent occasionally lowercases US tickers).
 		canonical := matchRequested(symbol, normalized)
