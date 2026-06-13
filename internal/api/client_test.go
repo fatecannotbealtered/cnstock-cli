@@ -1,9 +1,51 @@
 package api
 
 import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+// TestDoOnceStatusMapping verifies upstream HTTP client-error statuses map onto
+// the error taxonomy so an agent can tell "bad symbol" (404) from "rate limited"
+// (429) instead of every 4xx collapsing to E_NETWORK.
+func TestDoOnceStatusMapping(t *testing.T) {
+	tests := []struct {
+		name      string
+		status    int
+		wantAs    func(error) bool
+		wantRetry bool
+	}{
+		{"not_found", http.StatusNotFound, func(e error) bool { var t *NotFoundError; return errors.As(e, &t) }, false},
+		{"rate_limited", http.StatusTooManyRequests, func(e error) bool { var t *RateLimitError; return errors.As(e, &t) }, true},
+		{"unauthorized", http.StatusUnauthorized, func(e error) bool { var t *AuthError; return errors.As(e, &t) }, false},
+		{"forbidden", http.StatusForbidden, func(e error) bool { var t *ForbiddenError; return errors.As(e, &t) }, false},
+		{"server", http.StatusInternalServerError, func(e error) bool { var t *ServerError; return errors.As(e, &t) }, true},
+		{"teapot_other", http.StatusTeapot, func(e error) bool { var t *NetworkError; return errors.As(e, &t) }, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tt.status)
+			}))
+			defer srv.Close()
+			c := &Client{http: srv.Client(), maxRetries: 0}
+			_, retryable, err := c.doOnce(context.Background(), srv.URL)
+			if err == nil {
+				t.Fatalf("expected error for status %d", tt.status)
+			}
+			if !tt.wantAs(err) {
+				t.Fatalf("status %d mapped to wrong error type: %v", tt.status, err)
+			}
+			if retryable != tt.wantRetry {
+				t.Fatalf("status %d retryable = %v, want %v", tt.status, retryable, tt.wantRetry)
+			}
+		})
+	}
+}
 
 func TestRefererForURL(t *testing.T) {
 	tests := []struct {

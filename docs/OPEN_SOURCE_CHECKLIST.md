@@ -14,7 +14,7 @@ Use this before a public release or major contract change.
 ## CLI Contract
 
 - [ ] JSON mode stdout is exactly one envelope.
-- [ ] Error envelopes go to stderr and include `ok:false`, `schema_version`, `meta.duration_ms`, `error.code`, `error.details`, and `error.retryable`.
+- [ ] Error envelopes go to stdout (the single JSON document agents parse) and include `ok:false`, `schema_version`, `meta.duration_ms`, `error.code`, `error.details`, and `error.retryable`.
 - [ ] `reference`, `context`, `doctor`, and `changelog` are present and current.
 - [ ] Exit codes match `reference.data.error_codes`.
 - [ ] `--fields` and `--compact` work for JSON output.
