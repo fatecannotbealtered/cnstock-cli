@@ -157,19 +157,21 @@ func buildReference() referenceData {
 			{Path: "quote", Type: "query", Description: "Real-time quotes for A-share, HK, US stocks, and indices.", PermissionTier: "read-only", RawSupported: true, Pagination: "none; comma-separated batch input capped at 50 symbols", OutputSchema: "quote[]", Examples: []string{"cnstock-cli quote 600519 --compact", "cnstock-cli quote 600519,000001,hsi --compact"}, Params: []referenceParam{
 				{Name: "symbols", Type: "string", Required: true, Multiple: true, Description: "One symbol or a comma-separated list; auto-normalized across CN/HK/US/index aliases."},
 			}},
-			{Path: "kline", Type: "query", Description: "Historical K-line bars.", PermissionTier: "read-only", RawSupported: true, Pagination: "limit parameter, 1-500 bars; optional --from/--to date window", OutputSchema: "kline_bar[]", Examples: []string{"cnstock-cli kline 600519 --period day --limit 30 --compact", "cnstock-cli kline 600519 --from 2024-01-01 --to 2024-03-31 --compact"}, Params: []referenceParam{
-				{Name: "symbol", Type: "string", Required: true, Description: "Stock, fund, or index symbol."},
+			{Path: "kline", Type: "query", Description: "Historical K-line bars; batch (comma-separated --symbols) loops client-side over the single-code upstream and aggregates per symbol.", PermissionTier: "read-only", RawSupported: true, Pagination: "limit parameter, 1-500 bars; optional --from/--to date window; batch input capped at 50 symbols", OutputSchema: "kline_batch", Examples: []string{"cnstock-cli kline 600519 --period day --limit 30 --compact", "cnstock-cli kline 600519,000001,hk00700 --period day --limit 30 --compact", "cnstock-cli kline 600519 --from 2024-01-01 --to 2024-03-31 --compact"}, Params: []referenceParam{
+				{Name: "symbols", Type: "string", Required: true, Multiple: true, Description: "One symbol or a comma-separated batch; a single value degrades to a batch of one. (--symbol is a deprecated singular alias.)"},
 				{Name: "--period", Type: "enum", Default: "day", Description: "K-line period: day|week|month."},
 				{Name: "--limit", Type: "int", Default: "20", Description: "Number of bars, 1-500."},
 				{Name: "--adj", Type: "enum", Default: "qfq", Description: "Adjustment mode: qfq|hfq|none."},
 				{Name: "--from", Type: "date", Description: "Start date YYYY-MM-DD; fetch the date-bounded bars (limit still caps the count)."},
 				{Name: "--to", Type: "date", Description: "End date YYYY-MM-DD for the date-bounded range."},
+				{Name: "--continue-on-error", Type: "bool", Default: "true", Description: "Keep going after a per-symbol failure; set false to stop at the first failure (succeeded items are kept; remaining symbols reported as skipped)."},
 			}},
-			{Path: "financials", Type: "query", Description: "Company valuation: total/float market cap, PE, PB, turnover rate, and amount.", PermissionTier: "read-only", RawSupported: true, Pagination: "none", OutputSchema: "financials", Examples: []string{"cnstock-cli financials 600519 --compact"}, Params: []referenceParam{
-				{Name: "symbol", Type: "string", Required: true, Description: "Stock or index symbol; auto-normalized across CN/HK/US."},
+			{Path: "financials", Type: "query", Description: "Company valuation: total/float market cap, PE, PB, turnover rate, and amount; batch (comma-separated --symbols) served natively by the multi-code upstream and aggregated per symbol.", PermissionTier: "read-only", RawSupported: true, Pagination: "none; batch input capped at 50 symbols", OutputSchema: "financials_batch", Examples: []string{"cnstock-cli financials 600519 --compact", "cnstock-cli financials 600519,000001,hk00700 --compact"}, Params: []referenceParam{
+				{Name: "symbols", Type: "string", Required: true, Multiple: true, Description: "One symbol or a comma-separated batch; auto-normalized across CN/HK/US; a single value degrades to a batch of one. (--symbol is a deprecated singular alias.)"},
+				{Name: "--continue-on-error", Type: "bool", Default: "true", Description: "Keep going after a per-symbol failure; set false to stop at the first failure (succeeded items are kept; remaining symbols reported as skipped)."},
 			}},
-			{Path: "minute", Type: "query", Description: "Intraday minute ticks for the current trading day.", PermissionTier: "read-only", RawSupported: true, Pagination: "none; upstream returns current-day minutes", OutputSchema: "minute_tick[]", Examples: []string{"cnstock-cli minute 600519 --compact"}, Params: []referenceParam{
-				{Name: "symbol", Type: "string", Required: true, Description: "Stock, fund, or index symbol."},
+			{Path: "minute", Type: "query", Description: "Intraday minute ticks for the current trading day. Uses the plural --symbols input for cross-command consistency; multi-symbol intraday fetch is deferred, so >1 symbol is rejected with E_VALIDATION.", PermissionTier: "read-only", RawSupported: true, Pagination: "none; upstream returns current-day minutes", OutputSchema: "minute_tick[]", Examples: []string{"cnstock-cli minute 600519 --compact"}, Params: []referenceParam{
+				{Name: "symbols", Type: "string", Required: true, Multiple: true, Description: "A single symbol; multi-symbol input is rejected until upstream multi-code minute support is confirmed. (--symbol is a deprecated singular alias.)"},
 			}},
 			{Path: "search", Type: "query", Description: "Search stocks by Chinese name, pinyin, English name, or code.", PermissionTier: "read-only", RawSupported: true, Pagination: "upstream-limited result list", OutputSchema: "search_result[]", Examples: []string{"cnstock-cli search 茅台 --compact", "cnstock-cli search maotai --compact"}, Params: []referenceParam{
 				{Name: "keyword", Type: "string", Required: true, Description: "Chinese, pinyin, English, or code keyword."},
@@ -233,18 +235,20 @@ func buildReference() referenceData {
 			{Code: output.ErrUnknown, ExitCode: ExitGeneric, Retryable: false, Meaning: "Unexpected error."},
 		},
 		Schemas: map[string]referenceDataSchema{
-			"quote[]":         {Shape: "array", Fields: []string{"symbol", "market", "name", "code", "price", "prev_close", "open", "volume", "time", "change", "change_pct", "high", "low", "amount", "pe_ratio", "turnover", "bid", "ask", "warnings", "_untrusted"}, UntrustedFields: []string{"name", "name_en"}},
-			"kline_bar[]":     {Shape: "array", Fields: []string{"date", "open", "close", "high", "low", "volume"}},
-			"minute_tick[]":   {Shape: "array", Fields: []string{"time", "price", "volume", "amount"}},
-			"search_result[]": {Shape: "array", Fields: []string{"symbol", "name", "market", "pinyin", "_untrusted"}, UntrustedFields: []string{"name", "pinyin"}},
-			"sector[]":        {Shape: "array", Fields: []string{"code", "name", "change_pct", "change", "price", "turnover", "volume", "turnover_rate", "advance_decline", "leading_stock", "_untrusted"}, UntrustedFields: []string{"name", "advance_decline", "leading_stock.name"}},
-			"market_stats":    {Shape: "object", Fields: []string{"advancing", "declining", "flat", "limit_up", "limit_down", "amount", "markets", "warnings"}, UntrustedFields: []string{"markets[].name"}},
-			"financials":      {Shape: "object", Fields: []string{"symbol", "market", "name", "code", "price", "market_cap", "float_market_cap", "pe_ratio", "pb", "turnover_rate", "amount", "warnings", "_untrusted"}, UntrustedFields: []string{"name"}},
-			"update_report":   {Shape: "object", Fields: []string{"current_version", "latest_version", "target_version", "status", "update_available", "install_method", "release_url", "recommended_action", "commands", "signature_status", "skill_sync_command", "skill_sync_status", "confirm_token", "expires_at", "preview", "post_update_action", "notes"}},
-			"changelog":       {Shape: "object", Fields: []string{"current_version", "since", "entries"}},
-			"context":         {Shape: "object", Fields: []string{"version", "go_version", "os", "arch", "environment", "account", "risk_tier", "risk_summary", "permission_tier", "default_format", "formats", "commands", "config", "credentials", "endpoints"}},
-			"doctor":          {Shape: "object", Fields: []string{"ok", "checked_at", "risk_tier", "checks", "endpoints"}},
-			"reference":       {Shape: "object", Fields: []string{"tool", "version", "schema_version", "risk_tier", "risk_summary", "release_readiness", "output_contract", "permissions", "global_flags", "commands", "environment", "exit_codes", "error_codes", "schemas"}},
+			"quote[]":          {Shape: "array", Fields: []string{"symbol", "market", "name", "code", "price", "prev_close", "open", "volume", "time", "change", "change_pct", "high", "low", "amount", "pe_ratio", "turnover", "bid", "ask", "warnings", "_untrusted"}, UntrustedFields: []string{"name", "name_en"}},
+			"kline_bar[]":      {Shape: "array", Fields: []string{"date", "open", "close", "high", "low", "volume"}},
+			"kline_batch":      {Shape: "object", Fields: []string{"items", "summary", "items[].target", "items[].ok", "items[].data", "items[].error.code", "items[].error.retryable", "summary.total", "summary.succeeded", "summary.failed", "summary.skipped"}},
+			"financials_batch": {Shape: "object", Fields: []string{"items", "summary", "items[].target", "items[].ok", "items[].data", "items[].error.code", "items[].error.retryable", "summary.total", "summary.succeeded", "summary.failed", "summary.skipped"}, UntrustedFields: []string{"items[].data.name"}},
+			"minute_tick[]":    {Shape: "array", Fields: []string{"time", "price", "volume", "amount"}},
+			"search_result[]":  {Shape: "array", Fields: []string{"symbol", "name", "market", "pinyin", "_untrusted"}, UntrustedFields: []string{"name", "pinyin"}},
+			"sector[]":         {Shape: "array", Fields: []string{"code", "name", "change_pct", "change", "price", "turnover", "volume", "turnover_rate", "advance_decline", "leading_stock", "_untrusted"}, UntrustedFields: []string{"name", "advance_decline", "leading_stock.name"}},
+			"market_stats":     {Shape: "object", Fields: []string{"advancing", "declining", "flat", "limit_up", "limit_down", "amount", "markets", "warnings"}, UntrustedFields: []string{"markets[].name"}},
+			"financials":       {Shape: "object", Fields: []string{"symbol", "market", "name", "code", "price", "market_cap", "float_market_cap", "pe_ratio", "pb", "turnover_rate", "amount", "warnings", "_untrusted"}, UntrustedFields: []string{"name"}},
+			"update_report":    {Shape: "object", Fields: []string{"current_version", "latest_version", "target_version", "status", "update_available", "install_method", "release_url", "recommended_action", "commands", "signature_status", "skill_sync_command", "skill_sync_status", "confirm_token", "expires_at", "preview", "post_update_action", "notes"}},
+			"changelog":        {Shape: "object", Fields: []string{"current_version", "since", "entries"}},
+			"context":          {Shape: "object", Fields: []string{"version", "go_version", "os", "arch", "environment", "account", "risk_tier", "risk_summary", "permission_tier", "default_format", "formats", "commands", "config", "credentials", "endpoints"}},
+			"doctor":           {Shape: "object", Fields: []string{"ok", "checked_at", "risk_tier", "checks", "endpoints"}},
+			"reference":        {Shape: "object", Fields: []string{"tool", "version", "schema_version", "risk_tier", "risk_summary", "release_readiness", "output_contract", "permissions", "global_flags", "commands", "environment", "exit_codes", "error_codes", "schemas"}},
 		},
 	}
 }
@@ -266,8 +270,8 @@ func referenceMarkdown() string {
 | Command | Type | Data schema |
 |---------|------|-------------|
 | quote | query | quote[] |
-| kline | query | kline_bar[] |
-| financials | query | financials |
+| kline | query | kline_batch |
+| financials | query | financials_batch |
 | minute | query | minute_tick[] |
 | search | query | search_result[] |
 | sectors | query | sector[] |

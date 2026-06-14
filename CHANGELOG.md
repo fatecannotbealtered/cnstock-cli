@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Batch market-data queries** following a single batch contract (plural input, per-item aggregated `items[]` + `summary`, `--continue-on-error`):
+  - `financials <symbols>` — comma-separated batch served natively by the multi-code Tencent quote endpoint (class A); each symbol is aggregated per item, a missing symbol surfaces as a per-item `E_NOT_FOUND` rather than a whole-command failure.
+  - `kline <symbols>` — comma-separated batch; the single-code upstream is looped client-side (class B) and aggregated into the same shape, indistinguishable from a native batch.
+  - `--continue-on-error` (default `true`): best-effort finishes the whole batch; set `false` to stop at the first failure (succeeded items are kept, remaining symbols reported as `summary.skipped`).
+  - A command-wide argument error (bad `--limit`/`--adj`/`--from`/`--to`) fails the whole batch with top-level `E_VALIDATION`, not a per-item error.
+
+### Changed
+
+- `kline`, `financials`, and `minute` now take the plural `--symbols` input convention for cross-command consistency with `quote`; a single value degrades to a batch of one. `minute` adopts the plural input but rejects more than one symbol with `E_VALIDATION` (multi-symbol intraday fetch is deferred until the upstream's multi-code support is confirmed).
+- `reference` now exposes `kline_batch` / `financials_batch` output schemas (the `items[]`/`summary` shape, with `items[].data.name` listed under `untrusted_fields`) plus batch `examples[]`.
+
 ## [1.1.3] - 2026-06-14
 
 ### Added
