@@ -1,6 +1,7 @@
 package api
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -69,5 +70,34 @@ func TestKlineInvalidPeriod(t *testing.T) {
 	if e, ok := err.(*ValidationError); !ok || e == nil {
 		_ = ve
 		t.Errorf("expected ValidationError, got %T", err)
+	}
+}
+
+func TestKlineURLDateRange(t *testing.T) {
+	// A date window must be threaded into the upstream param as start/end.
+	reqURL, _, _, _, err := klineURL("sh600519", "day", 20, "qfq", "2024-01-01", "2024-03-31")
+	if err != nil {
+		t.Fatalf("klineURL error: %v", err)
+	}
+	// The param is url-escaped; the dates survive as %2C-joined fields.
+	if !strings.Contains(reqURL, "2024-01-01") || !strings.Contains(reqURL, "2024-03-31") {
+		t.Errorf("date-bounded URL missing from/to: %s", reqURL)
+	}
+	// Empty window must keep the trailing-limit form (no stray dates).
+	plainURL, _, _, _, err := klineURL("sh600519", "day", 20, "qfq", "", "")
+	if err != nil {
+		t.Fatalf("klineURL error: %v", err)
+	}
+	if strings.Contains(plainURL, "2024") {
+		t.Errorf("plain URL unexpectedly contains a date: %s", plainURL)
+	}
+}
+
+func TestKlineURLBadDate(t *testing.T) {
+	if _, _, _, _, err := klineURL("sh600519", "day", 20, "qfq", "2024/01/01", ""); err == nil {
+		t.Error("expected error for malformed --from")
+	}
+	if _, _, _, _, err := klineURL("sh600519", "day", 20, "qfq", "2024-03-31", "2024-01-01"); err == nil {
+		t.Error("expected error for from after to")
 	}
 }

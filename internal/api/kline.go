@@ -5,10 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
 )
 
 const maxKlineLimit = 500
+
+// klineDateRe validates the --from/--to date inputs (YYYY-MM-DD).
+var klineDateRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
 // validKlinePeriods enumerates the period values accepted by the Tencent K-line endpoint.
 // We validate them up-front to surface clearer errors than an empty payload from upstream.
@@ -18,9 +22,22 @@ var validKlinePeriods = map[string]struct{}{
 	"month": {},
 }
 
-// FetchKline fetches historical K-line data.
+// FetchKline fetches historical K-line data, taking the trailing `limit` bars.
 func FetchKline(ctx context.Context, client *Client, symbol string, period string, limit int, adj string) ([]KlineBar, error) {
-	reqURL, normalized, market, adjParam, err := klineURL(symbol, period, limit, adj)
+	return FetchKlineRange(ctx, client, symbol, period, limit, adj, "", "")
+}
+
+// FetchKlineRaw returns the raw upstream K-line response for the trailing `limit` bars.
+func FetchKlineRaw(ctx context.Context, client *Client, symbol string, period string, limit int, adj string) (string, error) {
+	return FetchKlineRangeRaw(ctx, client, symbol, period, limit, adj, "", "")
+}
+
+// FetchKlineRange fetches historical K-line data, optionally bounded by a
+// [from, to] date window (each YYYY-MM-DD). When both dates are empty it behaves
+// exactly like FetchKline (trailing `limit` bars); when a date window is given
+// the upstream returns the bars inside it and `limit` caps the count.
+func FetchKlineRange(ctx context.Context, client *Client, symbol, period string, limit int, adj, from, to string) ([]KlineBar, error) {
+	reqURL, normalized, market, adjParam, err := klineURL(symbol, period, limit, adj, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -31,9 +48,9 @@ func FetchKline(ctx context.Context, client *Client, symbol string, period strin
 	return parseKlineResponse(text, normalized, market, period, adjParam)
 }
 
-// FetchKlineRaw returns the raw upstream K-line response.
-func FetchKlineRaw(ctx context.Context, client *Client, symbol string, period string, limit int, adj string) (string, error) {
-	reqURL, _, _, _, err := klineURL(symbol, period, limit, adj)
+// FetchKlineRangeRaw returns the raw upstream date-bounded K-line response.
+func FetchKlineRangeRaw(ctx context.Context, client *Client, symbol, period string, limit int, adj, from, to string) (string, error) {
+	reqURL, _, _, _, err := klineURL(symbol, period, limit, adj, from, to)
 	if err != nil {
 		return "", err
 	}
@@ -41,7 +58,11 @@ func FetchKlineRaw(ctx context.Context, client *Client, symbol string, period st
 }
 
 // klineURL validates inputs and builds the K-line request URL.
-func klineURL(symbol, period string, limit int, adj string) (reqURL, normalized, market, adjParam string, err error) {
+//
+// from/to are optional YYYY-MM-DD bounds. The Tencent kline param is
+// `symbol,period,start,end,limit,adj`; empty start/end fall back to the
+// trailing-`limit` behavior.
+func klineURL(symbol, period string, limit int, adj, from, to string) (reqURL, normalized, market, adjParam string, err error) {
 	normalized, err = NormalizeSymbol(symbol)
 	if err != nil {
 		return "", "", "", "", err
@@ -51,6 +72,15 @@ func klineURL(symbol, period string, limit int, adj string) (reqURL, normalized,
 	}
 	if _, ok := validKlinePeriods[period]; !ok {
 		return "", "", "", "", newValidationError("period only supports day, week, month")
+	}
+	if from != "" && !klineDateRe.MatchString(from) {
+		return "", "", "", "", newValidationError("--from must be YYYY-MM-DD")
+	}
+	if to != "" && !klineDateRe.MatchString(to) {
+		return "", "", "", "", newValidationError("--to must be YYYY-MM-DD")
+	}
+	if from != "" && to != "" && from > to {
+		return "", "", "", "", newValidationError("--from must not be after --to")
 	}
 
 	market = DetectMarket(normalized)
@@ -67,7 +97,7 @@ func klineURL(symbol, period string, limit int, adj string) (reqURL, normalized,
 		return "", "", "", "", err
 	}
 
-	param := fmt.Sprintf("%s,%s,,,%d,%s", normalized, period, limit, adjParam)
+	param := fmt.Sprintf("%s,%s,%s,%s,%d,%s", normalized, period, from, to, limit, adjParam)
 	return ResolveKlineURL(path, url.QueryEscape(param)), normalized, market, adjParam, nil
 }
 

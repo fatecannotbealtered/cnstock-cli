@@ -57,3 +57,16 @@ go build -o cnstock-cli ./cmd/cnstock-cli
 ./cnstock-cli market --format json
 ./cnstock-cli sectors --board hy --top 5 --format json
 ```
+
+> **Needs live verification:** the reverse-engineered Eastmoney endpoints behind
+> `financials`, `constituents`, and `moneyflow` (env vars `CNS_FINANCIALS_ENDPOINT`,
+> `CNS_CONSTITUENTS_ENDPOINT`, `CNS_MONEYFLOW_ENDPOINT`) are parsed defensively
+> against the standard push2 JSON shape but have NOT yet been live-smoked; the
+> exact `f`-field IDs and the board-code format for `constituents` must be
+> confirmed against the real upstream and adjusted:
+>
+> ```bash
+> ./cnstock-cli financials 600519 --format json
+> ./cnstock-cli constituents BK0475 --format json
+> ./cnstock-cli moneyflow 600519 --format json
+> ```

@@ -37,6 +37,15 @@ const (
 	// LimitUpEndpoint / LimitDownEndpoint return limit-up/down pools (Eastmoney). Verb: date (YYYYMMDD).
 	LimitUpEndpoint   = "https://push2ex.eastmoney.com/getTopicZTPool?ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.ztzt&Pageindex=0&pagesize=1&sort=fbt:asc&date=%s"
 	LimitDownEndpoint = "https://push2ex.eastmoney.com/getTopicDTPool?ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.ztzt&Pageindex=0&pagesize=1&sort=fund:asc&date=%s"
+	// FinancialsEndpoint returns company fundamentals (Eastmoney stock/get). Verb: secid (e.g. 1.600519).
+	// REVERSE-ENGINEERED: field IDs and shape need live verification.
+	FinancialsEndpoint = "https://push2.eastmoney.com/api/qt/stock/get?ut=fa5fd1943c7b386f172d6893dbfba10b&invt=2&fltt=2&secid=%s&fields=f57,f58,f43,f116,f117,f162,f163,f167,f55,f92,f164,f173,f105,f183,f186,f84,f85"
+	// ConstituentsEndpoint returns the members of a board/index (Eastmoney clist). Verb: board code (e.g. BK0475 or index secid fragment).
+	// REVERSE-ENGINEERED: board-id format and field IDs need live verification.
+	ConstituentsEndpoint = "https://push2.eastmoney.com/api/qt/clist/get?ut=fa5fd1943c7b386f172d6893dbfba10b&fltt=2&invt=2&pn=1&pz=500&po=1&fid=f3&fs=b:%s&fields=f12,f14,f2,f3"
+	// MoneyFlowEndpoint returns main-capital / north-bound flow (Eastmoney stock/fflow). Verb: secid.
+	// REVERSE-ENGINEERED: field IDs and shape need live verification.
+	MoneyFlowEndpoint = "https://push2.eastmoney.com/api/qt/stock/get?ut=fa5fd1943c7b386f172d6893dbfba10b&invt=2&fltt=2&secid=%s&fields=f57,f58,f135,f136,f137,f138,f139,f140,f141,f142,f143,f144,f145,f146,f147,f148"
 )
 
 // Client is the HTTP client for Tencent Finance endpoints.
@@ -107,6 +116,21 @@ func ResolveLimitUpURL(date string) string {
 // ResolveLimitDownURL builds the limit-down pool request URL for the given date (YYYYMMDD).
 func ResolveLimitDownURL(date string) string {
 	return fmt.Sprintf(resolveEndpoint("CNS_LIMITDOWN_ENDPOINT", LimitDownEndpoint), date)
+}
+
+// ResolveFinancialsURL builds the company-fundamentals request URL for the given secid.
+func ResolveFinancialsURL(secid string) string {
+	return fmt.Sprintf(resolveEndpoint("CNS_FINANCIALS_ENDPOINT", FinancialsEndpoint), secid)
+}
+
+// ResolveConstituentsURL builds the board-constituents request URL for the given board code.
+func ResolveConstituentsURL(boardCode string) string {
+	return fmt.Sprintf(resolveEndpoint("CNS_CONSTITUENTS_ENDPOINT", ConstituentsEndpoint), boardCode)
+}
+
+// ResolveMoneyFlowURL builds the money-flow request URL for the given secid.
+func ResolveMoneyFlowURL(secid string) string {
+	return fmt.Sprintf(resolveEndpoint("CNS_MONEYFLOW_ENDPOINT", MoneyFlowEndpoint), secid)
 }
 
 // Get performs an HTTP GET request and returns the response body as bytes.

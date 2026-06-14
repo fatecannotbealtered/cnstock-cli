@@ -166,6 +166,53 @@ func mockSearchServer() *httptest.Server {
 	}))
 }
 
+// mockFinancialsServer returns an Eastmoney stock/get-style fundamentals payload.
+func mockFinancialsServer() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"rc":0,"data":{"f57":"600519","f58":"贵州茅台","f43":1800.00,"f116":2261000000000,"f117":2261000000000,"f162":33.5,"f163":34.1,"f167":9.8,"f55":42.5,"f92":430.2,"f173":1.2,"f105":31.4,"f183":120000000000,"f186":60000000000,"f164":91.5,"f84":1256000000,"f85":1256000000}}`))
+	}))
+}
+
+// mockConstituentsServer returns an Eastmoney clist-style board-members payload.
+func mockConstituentsServer() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"rc":0,"data":{"total":2,"diff":[{"f12":"600519","f14":"贵州茅台","f2":1800.00,"f3":1.33,"f127":5.4},{"f12":"000858","f14":"五粮液","f2":150.20,"f3":-0.85}]}}`))
+	}))
+}
+
+// mockMoneyFlowServer returns an Eastmoney stock/get-style money-flow payload.
+func mockMoneyFlowServer() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"rc":0,"data":{"f57":"600519","f58":"贵州茅台","f135":123456789,"f136":2.5,"f137":80000000,"f139":40000000,"f141":-10000000,"f143":-110000000,"f148":50000000}}`))
+	}))
+}
+
+// mockMarketServer answers the breadth + limit-up/down pool endpoints.
+func mockMarketServer(t *testing.T, wantDate string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.RequestURI, "ulist.np"):
+			_, _ = w.Write([]byte(`{"rc":0,"data":{"diff":[{"f3":-0.74,"f6":1363887868514.9,"f14":"上证指数","f104":1284,"f105":1008,"f106":60}]}}`))
+		case strings.Contains(r.RequestURI, "ZTPool"):
+			if d := r.URL.Query().Get("date"); wantDate != "" && d != wantDate {
+				t.Errorf("limit-up pool date = %q, want %q", d, wantDate)
+			}
+			_, _ = w.Write([]byte(`{"rc":0,"data":{"tc":42}}`))
+		case strings.Contains(r.RequestURI, "DTPool"):
+			if d := r.URL.Query().Get("date"); wantDate != "" && d != wantDate {
+				t.Errorf("limit-down pool date = %q, want %q", d, wantDate)
+			}
+			_, _ = w.Write([]byte(`{"rc":0,"data":{"tc":3}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+}
+
 // --- Helper ---
 
 type cmdResult struct {
@@ -617,4 +664,138 @@ func TestBinary_QuietMode(t *testing.T) {
 	// With --quiet + --json, stdout should be clean JSON only
 	var quotes []map[string]any
 	decodeData(t, r.Stdout, &quotes)
+}
+
+func TestBinary_FinancialsJSON(t *testing.T) {
+	server := mockFinancialsServer()
+
+	r := runBinary(map[string]string{
+		"CNS_FINANCIALS_ENDPOINT": server.URL + "/api/qt/stock/get?secid=%s",
+	}, "financials", "600519", "--json")
+
+	if r.ExitCode != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", r.ExitCode, r.Stderr)
+	}
+	var f map[string]any
+	decodeData(t, r.Stdout, &f)
+	if f["pe_ttm"] != 33.5 {
+		t.Errorf("pe_ttm = %v, want 33.5", f["pe_ttm"])
+	}
+	if f["market_cap"].(float64) != 2261000000000 {
+		t.Errorf("market_cap = %v, want 2261000000000", f["market_cap"])
+	}
+	untrusted, ok := f["_untrusted"].([]any)
+	if !ok || len(untrusted) == 0 {
+		t.Errorf("financials should tag name as _untrusted, got: %#v", f["_untrusted"])
+	}
+}
+
+func TestBinary_FinancialsRejectsNonAShare(t *testing.T) {
+	r := runBinary(nil, "financials", "hk00700", "--json")
+	if r.ExitCode != 2 {
+		t.Errorf("exit code = %d, want 2 (validation); stderr: %s", r.ExitCode, r.Stderr)
+	}
+	env := decodeError(t, r.Stdout)
+	if env.Error.Code != "E_VALIDATION" {
+		t.Errorf("error code = %s, want E_VALIDATION", env.Error.Code)
+	}
+}
+
+func TestBinary_ConstituentsJSON(t *testing.T) {
+	server := mockConstituentsServer()
+
+	r := runBinary(map[string]string{
+		"CNS_CONSTITUENTS_ENDPOINT": server.URL + "/api/qt/clist/get?fs=b:%s",
+	}, "constituents", "BK0475", "--json")
+
+	if r.ExitCode != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", r.ExitCode, r.Stderr)
+	}
+	var members []map[string]any
+	decodeData(t, r.Stdout, &members)
+	if len(members) != 2 {
+		t.Fatalf("expected 2 constituents, got %d", len(members))
+	}
+	if members[0]["code"] != "600519" {
+		t.Errorf("constituent[0].code = %v, want 600519", members[0]["code"])
+	}
+	if members[0]["change_pct"] != 1.33 {
+		t.Errorf("constituent[0].change_pct = %v, want 1.33", members[0]["change_pct"])
+	}
+}
+
+func TestBinary_MoneyflowJSON(t *testing.T) {
+	server := mockMoneyFlowServer()
+
+	r := runBinary(map[string]string{
+		"CNS_MONEYFLOW_ENDPOINT": server.URL + "/api/qt/stock/get?secid=%s",
+	}, "moneyflow", "600519", "--json")
+
+	if r.ExitCode != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", r.ExitCode, r.Stderr)
+	}
+	var mf map[string]any
+	decodeData(t, r.Stdout, &mf)
+	if mf["main_inflow"].(float64) != 123456789 {
+		t.Errorf("main_inflow = %v, want 123456789", mf["main_inflow"])
+	}
+	if mf["northbound_flow"].(float64) != 50000000 {
+		t.Errorf("northbound_flow = %v, want 50000000", mf["northbound_flow"])
+	}
+}
+
+func TestBinary_MarketWithDate(t *testing.T) {
+	server := mockMarketServer(t, "20240115")
+
+	r := runBinary(map[string]string{
+		"CNS_BREADTH_ENDPOINT":   server.URL + "/api/qt/ulist.np/get",
+		"CNS_LIMITUP_ENDPOINT":   server.URL + "/getTopicZTPool?date=%s",
+		"CNS_LIMITDOWN_ENDPOINT": server.URL + "/getTopicDTPool?date=%s",
+	}, "market", "--date", "20240115", "--json")
+
+	if r.ExitCode != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", r.ExitCode, r.Stderr)
+	}
+	var stats map[string]any
+	decodeData(t, r.Stdout, &stats)
+	if stats["limit_up"].(float64) != 42 {
+		t.Errorf("limit_up = %v, want 42", stats["limit_up"])
+	}
+	if stats["limit_down"].(float64) != 3 {
+		t.Errorf("limit_down = %v, want 3", stats["limit_down"])
+	}
+}
+
+func TestBinary_KlineDateRange(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.RequestURI, "2024-01-01") {
+			t.Errorf("kline request should carry the --from date, got: %s", r.RequestURI)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":0,"msg":"","data":{"sh600519":{"qfqday":[["2024-01-02","1780.00","1790.00","1795.00","1775.00","10000000"]]}}}`))
+	}))
+
+	r := runBinary(map[string]string{
+		"CNS_KLINE_ENDPOINT": server.URL + "/appstock/app/%s/get?param=%s",
+	}, "kline", "600519", "--from", "2024-01-01", "--to", "2024-03-31", "--json")
+
+	if r.ExitCode != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", r.ExitCode, r.Stderr)
+	}
+	var bars []map[string]any
+	decodeData(t, r.Stdout, &bars)
+	if len(bars) != 1 || bars[0]["date"] != "2024-01-02" {
+		t.Errorf("unexpected bars: %#v", bars)
+	}
+}
+
+func TestBinary_KlineBadDateRange(t *testing.T) {
+	r := runBinary(nil, "kline", "600519", "--from", "2024/01/01", "--json")
+	if r.ExitCode != 2 {
+		t.Errorf("exit code = %d, want 2 (validation); stderr: %s", r.ExitCode, r.Stderr)
+	}
+	env := decodeError(t, r.Stdout)
+	if env.Error.Code != "E_VALIDATION" {
+		t.Errorf("error code = %s, want E_VALIDATION", env.Error.Code)
+	}
 }

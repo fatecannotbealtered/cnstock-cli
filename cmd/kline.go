@@ -19,6 +19,8 @@ func init() {
 	klineCmd.Flags().String("period", "day", "Period: day|week|month")
 	klineCmd.Flags().Int("limit", 20, "Number of bars (1-500)")
 	klineCmd.Flags().String("adj", "qfq", "Adjustment: qfq=forward, hfq=backward, none=unadjusted")
+	klineCmd.Flags().String("from", "", "Start date YYYY-MM-DD (date-bounded range; limit still caps the count)")
+	klineCmd.Flags().String("to", "", "End date YYYY-MM-DD (date-bounded range)")
 	rootCmd.AddCommand(klineCmd)
 }
 
@@ -28,9 +30,11 @@ func runKline(cmd *cobra.Command, args []string) error {
 	period, _ := cmd.Flags().GetString("period")
 	limit, _ := cmd.Flags().GetInt("limit")
 	adj, _ := cmd.Flags().GetString("adj")
+	from, _ := cmd.Flags().GetString("from")
+	to, _ := cmd.Flags().GetString("to")
 
 	if outputFormat == "raw" {
-		raw, err := api.FetchKlineRaw(cmd.Context(), client, args[0], period, limit, adj)
+		raw, err := api.FetchKlineRangeRaw(cmd.Context(), client, args[0], period, limit, adj, from, to)
 		if err != nil {
 			return handleError(err)
 		}
@@ -38,7 +42,7 @@ func runKline(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	bars, err := api.FetchKline(cmd.Context(), client, args[0], period, limit, adj)
+	bars, err := api.FetchKlineRange(cmd.Context(), client, args[0], period, limit, adj, from, to)
 	if err != nil {
 		return handleError(err)
 	}
