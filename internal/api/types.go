@@ -1,6 +1,9 @@
 package api
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // ValidationError indicates bad arguments (e.g. invalid limit, empty keyword).
 type ValidationError struct {
@@ -133,6 +136,70 @@ type Quote struct {
 	FieldCount int      `json:"field_count,omitempty"`
 	Error      string   `json:"error,omitempty"`
 	Untrusted  []string `json:"_untrusted,omitempty"`
+}
+
+// BatchItemError mirrors the top-level error taxonomy (code + retryable) for a
+// single failed batch item, so an agent applies the same retry logic per item
+// as it does for a whole-command failure.
+type BatchItemError struct {
+	Code      string `json:"code"`
+	Retryable bool   `json:"retryable"`
+	Message   string `json:"message,omitempty"`
+}
+
+// BatchItem is one entry in an aggregated batch result. Target is the input
+// identifier (the natural key — the requested symbol), not an array index, so
+// the agent can zip results back to inputs. On success Data carries the payload;
+// on failure Error carries the per-item error and Data is nil.
+type BatchItem[T any] struct {
+	Target string          `json:"target"`
+	OK     bool            `json:"ok"`
+	Data   T               `json:"data,omitempty"`
+	Error  *BatchItemError `json:"error,omitempty"`
+}
+
+// BatchSummary reports the item tally; counts always satisfy total = succeeded + failed.
+type BatchSummary struct {
+	Total     int `json:"total"`
+	Succeeded int `json:"succeeded"`
+	Failed    int `json:"failed"`
+	// Skipped counts targets not attempted because --continue-on-error=false
+	// stopped the batch early; the agent can resume from these.
+	Skipped int `json:"skipped,omitempty"`
+}
+
+// BatchResult is the aggregated batch envelope payload shared by every batch
+// query: per-item results plus a summary. The external shape is identical for
+// class A (native upstream multi-code) and class B (client-side loop).
+type BatchResult[T any] struct {
+	Items   []BatchItem[T] `json:"items"`
+	Summary BatchSummary   `json:"summary"`
+}
+
+// classifyBatchError maps an API error onto the per-item {code, retryable}
+// taxonomy used in BatchItem.Error. It mirrors the cmd-layer classifyError so a
+// per-item failure carries the same code an agent would see for a whole-command
+// failure of the same kind; the message is intentionally omitted by callers that
+// would leak upstream URLs (already redacted at the client boundary).
+func classifyBatchError(err error) *BatchItemError {
+	switch {
+	case errors.As(err, new(*ValidationError)):
+		return &BatchItemError{Code: "E_VALIDATION", Retryable: false, Message: err.Error()}
+	case errors.As(err, new(*NotFoundError)):
+		return &BatchItemError{Code: "E_NOT_FOUND", Retryable: false, Message: err.Error()}
+	case errors.As(err, new(*RateLimitError)):
+		return &BatchItemError{Code: "E_RATE_LIMITED", Retryable: true, Message: err.Error()}
+	case errors.As(err, new(*AuthError)):
+		return &BatchItemError{Code: "E_AUTH", Retryable: false, Message: err.Error()}
+	case errors.As(err, new(*ForbiddenError)):
+		return &BatchItemError{Code: "E_FORBIDDEN", Retryable: false, Message: err.Error()}
+	case errors.As(err, new(*ServerError)):
+		return &BatchItemError{Code: "E_SERVER", Retryable: true, Message: err.Error()}
+	case errors.As(err, new(*NetworkError)):
+		return &BatchItemError{Code: "E_NETWORK", Retryable: true, Message: err.Error()}
+	default:
+		return &BatchItemError{Code: "E_UNKNOWN", Retryable: false, Message: err.Error()}
+	}
 }
 
 // DepthLevel represents a single bid/ask price level.

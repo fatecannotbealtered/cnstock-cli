@@ -76,6 +76,51 @@ func TestParseFinancialsNotFound(t *testing.T) {
 	}
 }
 
+// TestParseFinancialsBatchLines verifies multi-code aggregation: every v_<sym>
+// line is parsed into its own Financials, while the pv_none_match sentinel and
+// empty payloads are skipped.
+func TestParseFinancialsBatchLines(t *testing.T) {
+	// Build two well-formed quote lines from field index maps so the valuation
+	// tail (37/38/39/44/45/46) lands exactly, then append the sentinel/empty.
+	line := func(symbol, name, code, pe string) string {
+		parts := make([]string, 50)
+		parts[0] = "1"
+		parts[1] = name
+		parts[2] = code
+		parts[3] = "100.00"
+		parts[37] = "12345"
+		parts[38] = "1.20"
+		parts[39] = pe
+		parts[44] = "2000.00"
+		parts[45] = "2000.00"
+		parts[46] = "0.80"
+		joined := ""
+		for i, p := range parts {
+			if i > 0 {
+				joined += "~"
+			}
+			joined += p
+		}
+		return `v_` + symbol + `="` + joined + `";`
+	}
+	text := line("sh600519", "贵州茅台", "600519", "19.52") +
+		line("sz000001", "平安银行", "000001", "5.30") +
+		`v_pv_none_match="1~~~";v_us0000="";`
+	got := parseFinancialsBatchLines(text)
+	if len(got) != 2 {
+		t.Fatalf("parsed %d entries, want 2 (sentinel/empty skipped): %v", len(got), got)
+	}
+	if got["sh600519"] == nil || got["sh600519"].Name != "贵州茅台" {
+		t.Errorf("sh600519 entry missing or wrong: %+v", got["sh600519"])
+	}
+	if got["sz000001"] == nil || got["sz000001"].PeRatio == nil || *got["sz000001"].PeRatio != 5.30 {
+		t.Errorf("sz000001 entry missing or wrong PE: %+v", got["sz000001"])
+	}
+	if _, leaked := got["pv_none_match"]; leaked {
+		t.Error("pv_none_match sentinel leaked into batch map")
+	}
+}
+
 func TestFetchFinancialsRejectsBadSymbol(t *testing.T) {
 	if _, err := FetchFinancials(bg, NewClient(), "   "); err == nil {
 		t.Error("expected validation error for empty symbol")

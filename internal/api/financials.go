@@ -54,8 +54,64 @@ func parseFinancialsResponse(text, symbol string) (*Financials, error) {
 	if match == nil || match[1] == "pv_none_match" || strings.TrimSpace(match[2]) == "" {
 		return nil, newNotFoundError("no fundamentals for %s", symbol)
 	}
+	return financialsFromQuoteLine(symbol, match[2]), nil
+}
 
-	parts := strings.Split(match[2], "~")
+// FetchFinancialsBatch fetches fundamentals for many symbols in one call. The
+// Tencent quote endpoint natively serves multiple comma-joined codes (class A),
+// so this issues a single request and aggregates per symbol. A symbol the
+// upstream did not return is reported as a per-item E_NOT_FOUND, never a
+// whole-batch failure. continueOnError=false stops at the first failed item;
+// the remaining requested symbols are reported as skipped.
+func FetchFinancialsBatch(ctx context.Context, client *Client, symbols string, continueOnError bool) (*BatchResult[*Financials], error) {
+	normalized, err := ParseSymbolList(symbols)
+	if err != nil {
+		return nil, err
+	}
+	text, err := client.GetString(ctx, ResolveQuoteURL(strings.Join(normalized, ",")))
+	if err != nil {
+		return nil, err
+	}
+	parsed := parseFinancialsBatchLines(text)
+	return aggregateBatch(normalized, continueOnError, func(sym string) (*Financials, error) {
+		f, ok := parsed[sym]
+		if !ok {
+			return nil, newNotFoundError("no fundamentals for %s", sym)
+		}
+		return f, nil
+	}), nil
+}
+
+// parseFinancialsBatchLines walks every v_<symbol>="..." line in one multi-code
+// quote response (FindAllStringSubmatch), mapping normalized symbol -> parsed
+// fundamentals. The pv_none_match sentinel and empty payloads are skipped so a
+// requested-but-missing symbol surfaces as a per-item not-found upstream.
+func parseFinancialsBatchLines(text string) map[string]*Financials {
+	result := make(map[string]*Financials)
+	// Split on ';' first like the quote parser: the regex's greedy `.*` would
+	// otherwise span from the first quote to the last across all lines and
+	// yield a single bogus match.
+	for _, line := range strings.Split(text, ";") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		m := financialsLineRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		symbol, data := m[1], m[2]
+		if symbol == "pv_none_match" || strings.TrimSpace(data) == "" {
+			continue
+		}
+		result[symbol] = financialsFromQuoteLine(symbol, data)
+	}
+	return result
+}
+
+// financialsFromQuoteLine parses one ~-delimited Tencent quote tail into Financials.
+func financialsFromQuoteLine(symbol, data string) *Financials {
+	parts := strings.Split(data, "~")
 	market := DetectMarket(symbol)
 	f := &Financials{
 		Symbol:         symbol,
@@ -76,7 +132,7 @@ func parseFinancialsResponse(text, symbol string) (*Financials, error) {
 	if f.Name != "" {
 		f.Untrusted = append(f.Untrusted, "name")
 	}
-	return f, nil
+	return f
 }
 
 // scaleFloat multiplies a float pointer by factor, preserving nil. Tencent

@@ -48,6 +48,28 @@ func FetchKlineRange(ctx context.Context, client *Client, symbol, period string,
 	return parseKlineResponse(text, normalized, market, period, adjParam)
 }
 
+// FetchKlineBatch fetches K-line bars for many symbols. The Tencent fqkline
+// endpoint only serves one code per call, so this loops client-side (class B)
+// and aggregates into the shared BatchResult shape; the agent cannot tell it
+// from a native multi-code batch. A per-symbol upstream error (bad symbol, no
+// data, network) is captured as a per-item error and, with continueOnError=true
+// (default), does not abort the rest of the batch.
+func FetchKlineBatch(ctx context.Context, client *Client, symbols, period string, limit int, adj, from, to string, continueOnError bool) (*BatchResult[[]KlineBar], error) {
+	normalized, err := ParseSymbolList(symbols)
+	if err != nil {
+		return nil, err
+	}
+	// Command-wide arguments (period/limit/adj/from/to) are validated once,
+	// up-front: a bad value applies to every symbol identically, so it is a
+	// whole-batch usage error (top-level E_VALIDATION), not a per-item failure.
+	if err := validateKlineParams(period, limit, adj, from, to); err != nil {
+		return nil, err
+	}
+	return aggregateBatch(normalized, continueOnError, func(sym string) ([]KlineBar, error) {
+		return FetchKlineRange(ctx, client, sym, period, limit, adj, from, to)
+	}), nil
+}
+
 // FetchKlineRangeRaw returns the raw upstream date-bounded K-line response.
 func FetchKlineRangeRaw(ctx context.Context, client *Client, symbol, period string, limit int, adj, from, to string) (string, error) {
 	reqURL, _, _, _, err := klineURL(symbol, period, limit, adj, from, to)
@@ -55,6 +77,33 @@ func FetchKlineRangeRaw(ctx context.Context, client *Client, symbol, period stri
 		return "", err
 	}
 	return client.GetString(ctx, reqURL)
+}
+
+// validateKlineParams validates the command-wide K-line arguments shared by
+// every symbol in a batch (period, limit, adj, date window). It is the single
+// source of truth for these checks, called both per-symbol in klineURL and
+// once up-front in FetchKlineBatch so a bad argument is a whole-batch usage
+// error rather than a per-item failure.
+func validateKlineParams(period string, limit int, adj, from, to string) error {
+	if limit < 1 || limit > maxKlineLimit {
+		return newValidationError("limit must be between 1 and %d", maxKlineLimit)
+	}
+	if _, ok := validKlinePeriods[period]; !ok {
+		return newValidationError("period only supports day, week, month")
+	}
+	if from != "" && !klineDateRe.MatchString(from) {
+		return newValidationError("--from must be YYYY-MM-DD")
+	}
+	if to != "" && !klineDateRe.MatchString(to) {
+		return newValidationError("--to must be YYYY-MM-DD")
+	}
+	if from != "" && to != "" && from > to {
+		return newValidationError("--from must not be after --to")
+	}
+	if _, err := NormalizeAdj(adj); err != nil {
+		return err
+	}
+	return nil
 }
 
 // klineURL validates inputs and builds the K-line request URL.
@@ -67,20 +116,8 @@ func klineURL(symbol, period string, limit int, adj, from, to string) (reqURL, n
 	if err != nil {
 		return "", "", "", "", err
 	}
-	if limit < 1 || limit > maxKlineLimit {
-		return "", "", "", "", newValidationError("limit must be between 1 and %d", maxKlineLimit)
-	}
-	if _, ok := validKlinePeriods[period]; !ok {
-		return "", "", "", "", newValidationError("period only supports day, week, month")
-	}
-	if from != "" && !klineDateRe.MatchString(from) {
-		return "", "", "", "", newValidationError("--from must be YYYY-MM-DD")
-	}
-	if to != "" && !klineDateRe.MatchString(to) {
-		return "", "", "", "", newValidationError("--to must be YYYY-MM-DD")
-	}
-	if from != "" && to != "" && from > to {
-		return "", "", "", "", newValidationError("--from must not be after --to")
+	if err = validateKlineParams(period, limit, adj, from, to); err != nil {
+		return "", "", "", "", err
 	}
 
 	market = DetectMarket(normalized)
