@@ -77,6 +77,7 @@ type referenceCommand struct {
 	Pagination     string           `json:"pagination"`
 	Params         []referenceParam `json:"params,omitempty"`
 	OutputSchema   string           `json:"output_schema"`
+	Examples       []string         `json:"examples,omitempty"`
 }
 
 type referenceEnv struct {
@@ -153,34 +154,34 @@ func buildReference() referenceData {
 			{Name: "--help", Type: "bool", Description: "Print help."},
 		},
 		Commands: []referenceCommand{
-			{Path: "quote", Type: "query", Description: "Real-time quotes for A-share, HK, US stocks, and indices.", PermissionTier: "read-only", RawSupported: true, Pagination: "none; comma-separated batch input capped at 50 symbols", OutputSchema: "quote[]", Params: []referenceParam{
+			{Path: "quote", Type: "query", Description: "Real-time quotes for A-share, HK, US stocks, and indices.", PermissionTier: "read-only", RawSupported: true, Pagination: "none; comma-separated batch input capped at 50 symbols", OutputSchema: "quote[]", Examples: []string{"cnstock-cli quote 600519 --compact", "cnstock-cli quote 600519,000001,hsi --compact"}, Params: []referenceParam{
 				{Name: "symbols", Type: "string", Required: true, Multiple: true, Description: "One symbol or a comma-separated list; auto-normalized across CN/HK/US/index aliases."},
 			}},
-			{Path: "kline", Type: "query", Description: "Historical K-line bars.", PermissionTier: "read-only", RawSupported: true, Pagination: "limit parameter, 1-500 bars", OutputSchema: "kline_bar[]", Params: []referenceParam{
+			{Path: "kline", Type: "query", Description: "Historical K-line bars.", PermissionTier: "read-only", RawSupported: true, Pagination: "limit parameter, 1-500 bars", OutputSchema: "kline_bar[]", Examples: []string{"cnstock-cli kline 600519 --period day --limit 30 --compact"}, Params: []referenceParam{
 				{Name: "symbol", Type: "string", Required: true, Description: "Stock, fund, or index symbol."},
 				{Name: "--period", Type: "enum", Default: "day", Description: "K-line period: day|week|month."},
 				{Name: "--limit", Type: "int", Default: "20", Description: "Number of bars, 1-500."},
 				{Name: "--adj", Type: "enum", Default: "qfq", Description: "Adjustment mode: qfq|hfq|none."},
 			}},
-			{Path: "minute", Type: "query", Description: "Intraday minute ticks for the current trading day.", PermissionTier: "read-only", RawSupported: true, Pagination: "none; upstream returns current-day minutes", OutputSchema: "minute_tick[]", Params: []referenceParam{
+			{Path: "minute", Type: "query", Description: "Intraday minute ticks for the current trading day.", PermissionTier: "read-only", RawSupported: true, Pagination: "none; upstream returns current-day minutes", OutputSchema: "minute_tick[]", Examples: []string{"cnstock-cli minute 600519 --compact"}, Params: []referenceParam{
 				{Name: "symbol", Type: "string", Required: true, Description: "Stock, fund, or index symbol."},
 			}},
-			{Path: "search", Type: "query", Description: "Search stocks by Chinese name, pinyin, English name, or code.", PermissionTier: "read-only", RawSupported: true, Pagination: "upstream-limited result list", OutputSchema: "search_result[]", Params: []referenceParam{
+			{Path: "search", Type: "query", Description: "Search stocks by Chinese name, pinyin, English name, or code.", PermissionTier: "read-only", RawSupported: true, Pagination: "upstream-limited result list", OutputSchema: "search_result[]", Examples: []string{"cnstock-cli search 茅台 --compact", "cnstock-cli search maotai --compact"}, Params: []referenceParam{
 				{Name: "keyword", Type: "string", Required: true, Description: "Chinese, pinyin, English, or code keyword."},
 			}},
-			{Path: "sectors", Type: "query", Description: "Sector, concept, or region ranking.", PermissionTier: "read-only", RawSupported: true, Pagination: "top parameter, 1-50 rows", OutputSchema: "sector[]", Params: []referenceParam{
+			{Path: "sectors", Type: "query", Description: "Sector, concept, or region ranking.", PermissionTier: "read-only", RawSupported: true, Pagination: "top parameter, 1-50 rows", OutputSchema: "sector[]", Examples: []string{"cnstock-cli sectors --board hy --top 10 --direction up --compact"}, Params: []referenceParam{
 				{Name: "--board", Type: "enum", Default: "hy", Description: "Board type: hy=industry, gn=concept, dy=region."},
 				{Name: "--top", Type: "int", Default: "10", Description: "Number of sectors, 1-50."},
 				{Name: "--direction", Type: "enum", Default: "up", Description: "Ranking direction: up|down."},
 			}},
-			{Path: "market", Type: "query", Description: "Whole-market breadth, turnover, and best-effort limit-up/down statistics.", PermissionTier: "read-only", RawSupported: true, Pagination: "none", OutputSchema: "market_stats"},
-			{Path: "reference", Type: "self-description", Description: "Machine-readable command, flag, schema, and exit-code reference.", PermissionTier: "read-only", RawSupported: true, Pagination: "none", OutputSchema: "reference"},
-			{Path: "context", Type: "self-description", Description: "Runtime environment, command list, endpoint configuration, and credential status.", PermissionTier: "read-only", Pagination: "none", OutputSchema: "context"},
-			{Path: "doctor", Type: "self-description", Description: "Endpoint, version, credential, permission, and network health checks.", PermissionTier: "read-only", Pagination: "none", OutputSchema: "doctor"},
-			{Path: "changelog", Type: "self-description", Description: "Version changes derived from CHANGELOG.md.", PermissionTier: "read-only", RawSupported: true, Pagination: "none", OutputSchema: "changelog", Params: []referenceParam{
+			{Path: "market", Type: "query", Description: "Whole-market breadth, turnover, and best-effort limit-up/down statistics.", PermissionTier: "read-only", RawSupported: true, Pagination: "none", OutputSchema: "market_stats", Examples: []string{"cnstock-cli market --compact"}},
+			{Path: "reference", Type: "self-description", Description: "Machine-readable command, flag, schema, and exit-code reference.", PermissionTier: "read-only", RawSupported: true, Pagination: "none", OutputSchema: "reference", Examples: []string{"cnstock-cli reference --compact"}},
+			{Path: "context", Type: "self-description", Description: "Runtime environment, command list, endpoint configuration, and credential status.", PermissionTier: "read-only", Pagination: "none", OutputSchema: "context", Examples: []string{"cnstock-cli context --compact"}},
+			{Path: "doctor", Type: "self-description", Description: "Endpoint, version, credential, permission, and network health checks.", PermissionTier: "read-only", Pagination: "none", OutputSchema: "doctor", Examples: []string{"cnstock-cli doctor --compact"}},
+			{Path: "changelog", Type: "self-description", Description: "Version changes derived from CHANGELOG.md.", PermissionTier: "read-only", RawSupported: true, Pagination: "none", OutputSchema: "changelog", Examples: []string{"cnstock-cli changelog --since 1.1.0 --compact"}, Params: []referenceParam{
 				{Name: "--since", Type: "semver", Description: "Only include entries newer than this version."},
 			}},
-			{Path: "update", Type: "write", Description: "Check, dry-run, and confirm a local package/binary update, then sync the whole Agent Skill directory.", PermissionTier: "local-write", RawSupported: true, Pagination: "none", OutputSchema: "update_report", Params: []referenceParam{
+			{Path: "update", Type: "write", Description: "Check, dry-run, and confirm a local package/binary update, then sync the whole Agent Skill directory.", PermissionTier: "local-write", RawSupported: true, Pagination: "none", OutputSchema: "update_report", Examples: []string{"cnstock-cli update --check --compact", "cnstock-cli update --dry-run --compact", "cnstock-cli update --confirm <confirm_token> --compact"}, Params: []referenceParam{
 				{Name: "--check", Type: "bool", Description: "Check for an available update without changing files."},
 				{Name: "--method", Type: "enum", Default: "auto", Description: "Preferred update method hint: auto|npm|go|github."},
 				{Name: "--target-version", Type: "semver", Description: "Install a specific version instead of the latest release."},
