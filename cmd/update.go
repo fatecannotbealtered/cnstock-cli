@@ -175,6 +175,19 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 	if payload.Command == "" {
 		return updateFail("automatic update is unsupported for method "+method, output.ErrValidation, ExitBadArgs)
 	}
+	// Single-use enforcement: a confirm token may drive exactly one update. A
+	// replay (e.g. an agent retrying an update that timed out) is rejected so the
+	// update cannot be duplicated; mark BEFORE performing it so a crash mid-update
+	// still consumes the token.
+	now := updateNow()
+	if isConfirmTokenConsumed(confirmToken, now) {
+		return updateFail("confirm token already used; the operation may have completed — re-run --dry-run to see current state", output.ErrConflict, ExitConflict)
+	}
+	expiresUnix := now.Add(15 * time.Minute).Unix()
+	if expires, perr := time.Parse(time.RFC3339, payload.ExpiresAt); perr == nil {
+		expiresUnix = expires.Unix()
+	}
+	markConfirmTokenConsumed(confirmToken, expiresUnix, now)
 	if err := runUpdateCommand(cmd.Context(), commandArgs); err != nil {
 		return updateFail("running update command: "+err.Error(), output.ErrNetwork, ExitNetwork)
 	}
