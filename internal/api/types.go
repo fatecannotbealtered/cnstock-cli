@@ -202,6 +202,63 @@ type MarketBreadth struct {
 	Untrusted []string `json:"_untrusted,omitempty"`
 }
 
+// Financials holds company fundamentals derived from Eastmoney's stock-get
+// endpoint (push2 family). All figures are best-effort: any field absent from
+// the upstream payload stays nil. Name/text fields are external data and are
+// listed in Untrusted.
+type Financials struct {
+	Symbol         string   `json:"symbol"`
+	Market         string   `json:"market"`
+	Name           string   `json:"name,omitempty"`
+	Code           string   `json:"code,omitempty"`
+	Price          *float64 `json:"price,omitempty"`
+	MarketCap      *float64 `json:"market_cap,omitempty"`       // 总市值 (yuan)
+	FloatMarketCap *float64 `json:"float_market_cap,omitempty"` // 流通市值 (yuan)
+	PeTTM          *float64 `json:"pe_ttm,omitempty"`           // 市盈率(动态/TTM)
+	PeStatic       *float64 `json:"pe_static,omitempty"`        // 市盈率(静态)
+	Pb             *float64 `json:"pb,omitempty"`               // 市净率
+	Eps            *float64 `json:"eps,omitempty"`              // 每股收益
+	Bvps           *float64 `json:"bvps,omitempty"`             // 每股净资产
+	DividendYield  *float64 `json:"dividend_yield,omitempty"`   // 股息率 (%)
+	Roe            *float64 `json:"roe,omitempty"`              // 净资产收益率 (%)
+	Revenue        *float64 `json:"revenue,omitempty"`          // 营业收入 (yuan)
+	NetProfit      *float64 `json:"net_profit,omitempty"`       // 净利润 (yuan)
+	GrossMargin    *float64 `json:"gross_margin,omitempty"`     // 毛利率 (%)
+	TotalShares    *float64 `json:"total_shares,omitempty"`     // 总股本
+	FloatShares    *float64 `json:"float_shares,omitempty"`     // 流通股本
+	Warnings       []string `json:"warnings,omitempty"`
+	Untrusted      []string `json:"_untrusted,omitempty"`
+}
+
+// Constituent is one member of an index/board, from Eastmoney's clist
+// board-constituents endpoint.
+type Constituent struct {
+	Code      string   `json:"code"`
+	Name      string   `json:"name,omitempty"`
+	Price     *float64 `json:"price,omitempty"`
+	ChangePct *float64 `json:"change_pct,omitempty"` // 涨跌幅 (%)
+	Weight    *float64 `json:"weight,omitempty"`     // 权重 (%), when published by upstream
+	Untrusted []string `json:"_untrusted,omitempty"`
+}
+
+// MoneyFlow holds main-capital / north-bound flow figures for one symbol,
+// from Eastmoney's stock fund-flow endpoint. Inflow figures are net (yuan).
+type MoneyFlow struct {
+	Symbol         string   `json:"symbol"`
+	Market         string   `json:"market"`
+	Name           string   `json:"name,omitempty"`
+	Code           string   `json:"code,omitempty"`
+	MainInflow     *float64 `json:"main_inflow,omitempty"`     // 主力净流入 (yuan)
+	MainInflowPct  *float64 `json:"main_inflow_pct,omitempty"` // 主力净占比 (%)
+	SuperInflow    *float64 `json:"super_inflow,omitempty"`    // 超大单净流入
+	LargeInflow    *float64 `json:"large_inflow,omitempty"`    // 大单净流入
+	MediumInflow   *float64 `json:"medium_inflow,omitempty"`   // 中单净流入
+	SmallInflow    *float64 `json:"small_inflow,omitempty"`    // 小单净流入
+	NorthboundFlow *float64 `json:"northbound_flow,omitempty"` // 北向净流入 (yuan), when available
+	Warnings       []string `json:"warnings,omitempty"`
+	Untrusted      []string `json:"_untrusted,omitempty"`
+}
+
 // MarketStats aggregates whole-market breadth statistics.
 // LimitUp/LimitDown are best-effort and may be nil when the upstream pool is
 // unavailable (e.g. non-trading day or pre-open); see Warnings.

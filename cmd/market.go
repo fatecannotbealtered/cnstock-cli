@@ -14,11 +14,14 @@ var marketCmd = &cobra.Command{
 }
 
 func init() {
+	marketCmd.Flags().String("date", "", "Limit-up/down pool date YYYYMMDD (overrides today for deterministic output)")
 	rootCmd.AddCommand(marketCmd)
 }
 
 func runMarket(cmd *cobra.Command, args []string) error {
 	client := api.NewClient()
+
+	date, _ := cmd.Flags().GetString("date")
 
 	if outputFormat == "raw" {
 		raw, err := api.FetchMarketStatsRaw(cmd.Context(), client)
@@ -29,7 +32,7 @@ func runMarket(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	stats, err := api.FetchMarketStats(cmd.Context(), client)
+	stats, err := api.FetchMarketStatsForDate(cmd.Context(), client, date)
 	if err != nil {
 		return handleError(err)
 	}

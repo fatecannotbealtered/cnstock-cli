@@ -14,6 +14,13 @@ import (
 // Limit-up/down counts are best-effort: a failure there degrades to a warning
 // rather than failing the whole command.
 func FetchMarketStats(ctx context.Context, client *Client) (*MarketStats, error) {
+	return FetchMarketStatsForDate(ctx, client, "")
+}
+
+// FetchMarketStatsForDate is FetchMarketStats with an explicit limit-up/down
+// pool date (YYYYMMDD). An empty date defaults to time.Now(); passing a fixed
+// date makes the limit-up/down pool deterministic and testable.
+func FetchMarketStatsForDate(ctx context.Context, client *Client, date string) (*MarketStats, error) {
 	text, err := client.GetString(ctx, ResolveBreadthURL())
 	if err != nil {
 		return nil, err
@@ -23,7 +30,9 @@ func FetchMarketStats(ctx context.Context, client *Client) (*MarketStats, error)
 		return nil, err
 	}
 
-	date := time.Now().Format("20060102")
+	if date == "" {
+		date = time.Now().Format("20060102")
+	}
 	if up, err := fetchPoolCount(ctx, client, ResolveLimitUpURL(date)); err == nil {
 		stats.LimitUp = up
 	} else {

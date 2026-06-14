@@ -1,6 +1,11 @@
 package api
 
-import "testing"
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
 
 const breadthFixture = `{"rc":0,"data":{"total":3,"diff":[
   {"f3":-0.74,"f6":1363887868514.9,"f14":"上证指数","f104":1284,"f105":1008,"f106":60},
@@ -40,5 +45,46 @@ func TestParseBreadthResponseEmpty(t *testing.T) {
 	}
 	if _, err := parseBreadthResponse(`not json`); err == nil {
 		t.Error("expected error for invalid JSON")
+	}
+}
+
+// TestFetchMarketStatsForDate verifies the --date override is threaded into the
+// limit-up/down pool URLs, making the pool counts deterministic.
+func TestFetchMarketStatsForDate(t *testing.T) {
+	var poolDates []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.RequestURI, "ulist.np"):
+			_, _ = w.Write([]byte(breadthFixture))
+		case strings.Contains(r.RequestURI, "ZTPool"):
+			poolDates = append(poolDates, r.URL.Query().Get("date"))
+			_, _ = w.Write([]byte(`{"rc":0,"data":{"tc":42}}`))
+		case strings.Contains(r.RequestURI, "DTPool"):
+			poolDates = append(poolDates, r.URL.Query().Get("date"))
+			_, _ = w.Write([]byte(`{"rc":0,"data":{"tc":3}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("CNS_BREADTH_ENDPOINT", server.URL+"/api/qt/ulist.np/get")
+	t.Setenv("CNS_LIMITUP_ENDPOINT", server.URL+"/getTopicZTPool?date=%s")
+	t.Setenv("CNS_LIMITDOWN_ENDPOINT", server.URL+"/getTopicDTPool?date=%s")
+
+	stats, err := FetchMarketStatsForDate(bg, NewClient(), "20240115")
+	if err != nil {
+		t.Fatalf("FetchMarketStatsForDate error: %v", err)
+	}
+	if stats.LimitUp == nil || *stats.LimitUp != 42 {
+		t.Errorf("LimitUp = %v, want 42", stats.LimitUp)
+	}
+	if stats.LimitDown == nil || *stats.LimitDown != 3 {
+		t.Errorf("LimitDown = %v, want 3", stats.LimitDown)
+	}
+	for _, d := range poolDates {
+		if d != "20240115" {
+			t.Errorf("pool date = %q, want 20240115", d)
+		}
 	}
 }

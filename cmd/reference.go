@@ -157,11 +157,22 @@ func buildReference() referenceData {
 			{Path: "quote", Type: "query", Description: "Real-time quotes for A-share, HK, US stocks, and indices.", PermissionTier: "read-only", RawSupported: true, Pagination: "none; comma-separated batch input capped at 50 symbols", OutputSchema: "quote[]", Examples: []string{"cnstock-cli quote 600519 --compact", "cnstock-cli quote 600519,000001,hsi --compact"}, Params: []referenceParam{
 				{Name: "symbols", Type: "string", Required: true, Multiple: true, Description: "One symbol or a comma-separated list; auto-normalized across CN/HK/US/index aliases."},
 			}},
-			{Path: "kline", Type: "query", Description: "Historical K-line bars.", PermissionTier: "read-only", RawSupported: true, Pagination: "limit parameter, 1-500 bars", OutputSchema: "kline_bar[]", Examples: []string{"cnstock-cli kline 600519 --period day --limit 30 --compact"}, Params: []referenceParam{
+			{Path: "kline", Type: "query", Description: "Historical K-line bars.", PermissionTier: "read-only", RawSupported: true, Pagination: "limit parameter, 1-500 bars; optional --from/--to date window", OutputSchema: "kline_bar[]", Examples: []string{"cnstock-cli kline 600519 --period day --limit 30 --compact", "cnstock-cli kline 600519 --from 2024-01-01 --to 2024-03-31 --compact"}, Params: []referenceParam{
 				{Name: "symbol", Type: "string", Required: true, Description: "Stock, fund, or index symbol."},
 				{Name: "--period", Type: "enum", Default: "day", Description: "K-line period: day|week|month."},
 				{Name: "--limit", Type: "int", Default: "20", Description: "Number of bars, 1-500."},
 				{Name: "--adj", Type: "enum", Default: "qfq", Description: "Adjustment mode: qfq|hfq|none."},
+				{Name: "--from", Type: "date", Description: "Start date YYYY-MM-DD; fetch the date-bounded bars (limit still caps the count)."},
+				{Name: "--to", Type: "date", Description: "End date YYYY-MM-DD for the date-bounded range."},
+			}},
+			{Path: "financials", Type: "query", Description: "Company fundamentals: market cap, PE, PB, EPS, dividend yield, ROE, revenue, and net profit.", PermissionTier: "read-only", RawSupported: true, Pagination: "none", OutputSchema: "financials", Examples: []string{"cnstock-cli financials 600519 --compact"}, Params: []referenceParam{
+				{Name: "symbol", Type: "string", Required: true, Description: "A-share stock symbol."},
+			}},
+			{Path: "constituents", Type: "query", Description: "List the constituent stocks of an index or board with code, name, price, change, and weight.", PermissionTier: "read-only", RawSupported: true, Pagination: "upstream-limited list (up to 500 rows)", OutputSchema: "constituent[]", Examples: []string{"cnstock-cli constituents BK0475 --compact"}, Params: []referenceParam{
+				{Name: "index", Type: "string", Required: true, Description: "Eastmoney board/index code (e.g. BK0475)."},
+			}},
+			{Path: "moneyflow", Type: "query", Description: "Main-capital and north-bound money-flow figures for a symbol.", PermissionTier: "read-only", RawSupported: true, Pagination: "none", OutputSchema: "money_flow", Examples: []string{"cnstock-cli moneyflow 600519 --compact"}, Params: []referenceParam{
+				{Name: "symbol", Type: "string", Required: true, Description: "A-share stock symbol."},
 			}},
 			{Path: "minute", Type: "query", Description: "Intraday minute ticks for the current trading day.", PermissionTier: "read-only", RawSupported: true, Pagination: "none; upstream returns current-day minutes", OutputSchema: "minute_tick[]", Examples: []string{"cnstock-cli minute 600519 --compact"}, Params: []referenceParam{
 				{Name: "symbol", Type: "string", Required: true, Description: "Stock, fund, or index symbol."},
@@ -174,7 +185,9 @@ func buildReference() referenceData {
 				{Name: "--top", Type: "int", Default: "10", Description: "Number of sectors, 1-50."},
 				{Name: "--direction", Type: "enum", Default: "up", Description: "Ranking direction: up|down."},
 			}},
-			{Path: "market", Type: "query", Description: "Whole-market breadth, turnover, and best-effort limit-up/down statistics.", PermissionTier: "read-only", RawSupported: true, Pagination: "none", OutputSchema: "market_stats", Examples: []string{"cnstock-cli market --compact"}},
+			{Path: "market", Type: "query", Description: "Whole-market breadth, turnover, and best-effort limit-up/down statistics.", PermissionTier: "read-only", RawSupported: true, Pagination: "none", OutputSchema: "market_stats", Examples: []string{"cnstock-cli market --compact", "cnstock-cli market --date 20240115 --compact"}, Params: []referenceParam{
+				{Name: "--date", Type: "string", Description: "Limit-up/down pool date YYYYMMDD; overrides today for deterministic output."},
+			}},
 			{Path: "reference", Type: "self-description", Description: "Machine-readable command, flag, schema, and exit-code reference.", PermissionTier: "read-only", RawSupported: true, Pagination: "none", OutputSchema: "reference", Examples: []string{"cnstock-cli reference --compact"}},
 			{Path: "context", Type: "self-description", Description: "Runtime environment, command list, endpoint configuration, and credential status.", PermissionTier: "read-only", Pagination: "none", OutputSchema: "context", Examples: []string{"cnstock-cli context --compact"}},
 			{Path: "doctor", Type: "self-description", Description: "Endpoint, version, credential, permission, and network health checks.", PermissionTier: "read-only", Pagination: "none", OutputSchema: "doctor", Examples: []string{"cnstock-cli doctor --compact"}},
@@ -196,6 +209,9 @@ func buildReference() referenceData {
 			{Name: "CNS_BREADTH_ENDPOINT", Description: "Market breadth endpoint URL.", Secret: false},
 			{Name: "CNS_LIMITUP_ENDPOINT", Description: "Limit-up pool endpoint URL template; must contain %s for date.", Secret: false},
 			{Name: "CNS_LIMITDOWN_ENDPOINT", Description: "Limit-down pool endpoint URL template; must contain %s for date.", Secret: false},
+			{Name: "CNS_FINANCIALS_ENDPOINT", Description: "Company-fundamentals endpoint URL template; must contain %s for secid.", Secret: false},
+			{Name: "CNS_CONSTITUENTS_ENDPOINT", Description: "Board-constituents endpoint URL template; must contain %s for the board code.", Secret: false},
+			{Name: "CNS_MONEYFLOW_ENDPOINT", Description: "Money-flow endpoint URL template; must contain %s for secid.", Secret: false},
 			{Name: "CNS_UPDATE_ENDPOINT", Description: "GitHub latest-release endpoint used by update.", Secret: false},
 		},
 		ExitCodes: []referenceExitCode{
@@ -232,6 +248,9 @@ func buildReference() referenceData {
 			"search_result[]": {Shape: "array", Fields: []string{"symbol", "name", "market", "pinyin", "_untrusted"}, UntrustedFields: []string{"name", "pinyin"}},
 			"sector[]":        {Shape: "array", Fields: []string{"code", "name", "change_pct", "change", "price", "turnover", "volume", "turnover_rate", "advance_decline", "leading_stock", "_untrusted"}, UntrustedFields: []string{"name", "advance_decline", "leading_stock.name"}},
 			"market_stats":    {Shape: "object", Fields: []string{"advancing", "declining", "flat", "limit_up", "limit_down", "amount", "markets", "warnings"}, UntrustedFields: []string{"markets[].name"}},
+			"financials":      {Shape: "object", Fields: []string{"symbol", "market", "name", "code", "price", "market_cap", "float_market_cap", "pe_ttm", "pe_static", "pb", "eps", "bvps", "dividend_yield", "roe", "revenue", "net_profit", "gross_margin", "total_shares", "float_shares", "warnings", "_untrusted"}, UntrustedFields: []string{"name"}},
+			"constituent[]":   {Shape: "array", Fields: []string{"code", "name", "price", "change_pct", "weight", "_untrusted"}, UntrustedFields: []string{"name"}},
+			"money_flow":      {Shape: "object", Fields: []string{"symbol", "market", "name", "code", "main_inflow", "main_inflow_pct", "super_inflow", "large_inflow", "medium_inflow", "small_inflow", "northbound_flow", "warnings", "_untrusted"}, UntrustedFields: []string{"name"}},
 			"update_report":   {Shape: "object", Fields: []string{"current_version", "latest_version", "target_version", "status", "update_available", "install_method", "release_url", "recommended_action", "commands", "signature_status", "skill_sync_command", "skill_sync_status", "confirm_token", "expires_at", "preview", "post_update_action", "notes"}},
 			"changelog":       {Shape: "object", Fields: []string{"current_version", "since", "entries"}},
 			"context":         {Shape: "object", Fields: []string{"version", "go_version", "os", "arch", "environment", "account", "risk_tier", "risk_summary", "permission_tier", "default_format", "formats", "commands", "config", "credentials", "endpoints"}},
@@ -259,6 +278,9 @@ func referenceMarkdown() string {
 |---------|------|-------------|
 | quote | query | quote[] |
 | kline | query | kline_bar[] |
+| financials | query | financials |
+| constituents | query | constituent[] |
+| moneyflow | query | money_flow |
 | minute | query | minute_tick[] |
 | search | query | search_result[] |
 | sectors | query | sector[] |

@@ -142,6 +142,29 @@ func NormalizeSymbols(symbols string) ([]string, error) {
 	return result, nil
 }
 
+// EastmoneySecID converts a Tencent-style symbol (e.g. "sh600519") to an
+// Eastmoney secid ("1.600519"). Eastmoney prefixes Shanghai/Beijing-listed
+// codes with "1." and Shenzhen with "0."; HK/US are not addressable here and
+// return an error. The market prefix wins over the numeric heuristic so an
+// explicit "sz"/"sh"/"bj" is always honored.
+func EastmoneySecID(symbol string) (string, error) {
+	normalized, err := NormalizeSymbol(symbol)
+	if err != nil {
+		return "", err
+	}
+	lower := strings.ToLower(normalized)
+	switch {
+	case strings.HasPrefix(lower, "sh"):
+		return "1." + normalized[2:], nil
+	case strings.HasPrefix(lower, "sz"):
+		return "0." + normalized[2:], nil
+	case strings.HasPrefix(lower, "bj"):
+		return "0." + normalized[2:], nil
+	default:
+		return "", newValidationError("symbol %s is not an A-share code addressable via Eastmoney", symbol)
+	}
+}
+
 // NormalizeAdj converts CLI adjustment parameter to Tencent API parameter.
 func NormalizeAdj(adj string) (string, error) {
 	value := strings.ToLower(adj)
