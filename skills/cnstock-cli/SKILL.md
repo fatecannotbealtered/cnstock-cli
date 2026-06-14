@@ -95,6 +95,17 @@ cnstock-cli search 茅台 --compact
 cnstock-cli kline sh600519 --period day --limit 20 --adj qfq --compact
 ```
 
+### Batch K-line / Financials
+
+`kline` and `financials` accept a comma-separated `--symbols` batch and return a single aggregated envelope: `data.items[]` (each with `target`, `ok`, and either `data` or `error{code,retryable}`) plus `data.summary{total,succeeded,failed}`. A missing or bad symbol is reported per item; it does not fail the whole command. Zip results back to inputs by `target`.
+
+```bash
+cnstock-cli financials 600519,000001,hk00700 --compact
+cnstock-cli kline 600519,000001 --period day --limit 30 --compact
+```
+
+`--continue-on-error` defaults to `true` (finish the batch best-effort). Set `--continue-on-error=false` to stop at the first failure; succeeded items are kept and the remaining symbols are reported in `summary.skipped`. A command-wide argument error (e.g. bad `--limit`) fails the whole batch with `E_VALIDATION`, not per item. `minute` takes the same `--symbols` input but currently supports only one symbol (multi-symbol intraday is rejected with `E_VALIDATION`).
+
 ### Market Breadth
 
 ```bash

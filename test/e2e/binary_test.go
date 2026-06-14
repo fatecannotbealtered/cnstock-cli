@@ -367,13 +367,186 @@ func TestBinary_KlineJSON(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0; stderr: %s", r.ExitCode, r.Stderr)
 	}
 
-	var bars []map[string]any
-	decodeData(t, r.Stdout, &bars)
+	bars := klineBatchFirstItemBars(t, r.Stdout, "sh600519")
 	if len(bars) != 4 {
 		t.Fatalf("expected 4 bars, got %d", len(bars))
 	}
 	if bars[0]["date"] != "2024-01-12" {
 		t.Errorf("bar[0].date = %v, want 2024-01-12", bars[0]["date"])
+	}
+}
+
+// klineBatchFirstItemBars decodes the kline batch envelope and returns the bars
+// of the single successful item matching target, asserting the aggregated shape.
+func klineBatchFirstItemBars(t *testing.T, stdout, target string) []map[string]any {
+	t.Helper()
+	var result struct {
+		Items []struct {
+			Target string           `json:"target"`
+			OK     bool             `json:"ok"`
+			Data   []map[string]any `json:"data"`
+		} `json:"items"`
+		Summary map[string]any `json:"summary"`
+	}
+	decodeData(t, stdout, &result)
+	if result.Summary["total"] == nil {
+		t.Fatalf("batch result missing summary.total: %s", stdout)
+	}
+	for _, it := range result.Items {
+		if it.Target == target {
+			if !it.OK {
+				t.Fatalf("item %s not ok: %s", target, stdout)
+			}
+			return it.Data
+		}
+	}
+	t.Fatalf("target %s not found in batch items: %s", target, stdout)
+	return nil
+}
+
+// financialsBatchFirstItemData decodes the financials batch envelope and returns
+// the data of the single successful item matching target.
+func financialsBatchFirstItemData(t *testing.T, stdout, target string) map[string]any {
+	t.Helper()
+	var result struct {
+		Items []struct {
+			Target string         `json:"target"`
+			OK     bool           `json:"ok"`
+			Data   map[string]any `json:"data"`
+		} `json:"items"`
+		Summary map[string]any `json:"summary"`
+	}
+	decodeData(t, stdout, &result)
+	if result.Summary["total"] == nil {
+		t.Fatalf("batch result missing summary.total: %s", stdout)
+	}
+	for _, it := range result.Items {
+		if it.Target == target {
+			if !it.OK {
+				t.Fatalf("item %s not ok: %s", target, stdout)
+			}
+			return it.Data
+		}
+	}
+	t.Fatalf("target %s not found in batch items: %s", target, stdout)
+	return nil
+}
+
+// TestBinary_KlineBatchPartialFailure drives a multi-symbol kline batch where
+// the mock only serves sh600519; sz000001 falls through to a per-item
+// E_NOT_FOUND. The whole command still succeeds (ok=true) with an aggregated
+// summary — the agent cannot tell this class-B loop from a native batch.
+func TestBinary_KlineBatchPartialFailure(t *testing.T) {
+	server := mockKlineServer()
+
+	r := runBinary(map[string]string{
+		"CNS_KLINE_ENDPOINT": server.URL + "/appstock/app/%s/get?param=%s",
+	}, "kline", "600519,000001", "--limit", "4", "--json")
+
+	if r.ExitCode != 0 {
+		t.Fatalf("exit code = %d, want 0 (batch ran); stderr: %s", r.ExitCode, r.Stderr)
+	}
+
+	var result struct {
+		Items []struct {
+			Target string           `json:"target"`
+			OK     bool             `json:"ok"`
+			Data   []map[string]any `json:"data"`
+			Error  *struct {
+				Code      string `json:"code"`
+				Retryable bool   `json:"retryable"`
+			} `json:"error"`
+		} `json:"items"`
+		Summary struct {
+			Total     int `json:"total"`
+			Succeeded int `json:"succeeded"`
+			Failed    int `json:"failed"`
+		} `json:"summary"`
+	}
+	decodeData(t, r.Stdout, &result)
+
+	if result.Summary.Total != 2 || result.Summary.Succeeded != 1 || result.Summary.Failed != 1 {
+		t.Fatalf("summary = %+v, want total=2 succeeded=1 failed=1", result.Summary)
+	}
+	// Order must follow input: sh600519 first (ok), sz000001 second (failed).
+	if result.Items[0].Target != "sh600519" || !result.Items[0].OK || len(result.Items[0].Data) != 4 {
+		t.Errorf("items[0] = %+v, want sh600519 ok with 4 bars", result.Items[0])
+	}
+	if result.Items[1].Target != "sz000001" || result.Items[1].OK {
+		t.Fatalf("items[1] = %+v, want sz000001 failed", result.Items[1])
+	}
+	if result.Items[1].Error == nil || result.Items[1].Error.Code != "E_NOT_FOUND" {
+		t.Errorf("items[1].error = %+v, want E_NOT_FOUND", result.Items[1].Error)
+	}
+}
+
+// TestBinary_KlineBatchBadArgFailsWhole verifies a command-wide argument error
+// (bad --limit) fails the entire batch with top-level E_VALIDATION (exit 2),
+// not a per-item failure.
+func TestBinary_KlineBatchBadArgFailsWhole(t *testing.T) {
+	r := runBinary(nil, "kline", "600519,000001", "--limit", "0", "--json")
+	if r.ExitCode != 2 {
+		t.Fatalf("exit code = %d, want 2 (whole-batch validation); stderr: %s", r.ExitCode, r.Stderr)
+	}
+	env := decodeError(t, r.Stdout)
+	if env.Error.Code != "E_VALIDATION" {
+		t.Errorf("error code = %s, want E_VALIDATION", env.Error.Code)
+	}
+}
+
+// TestBinary_FinancialsBatch drives a multi-symbol financials batch served by
+// the multi-code Tencent endpoint (class A); the mock returns only sh600519, so
+// sz000001 surfaces as a per-item E_NOT_FOUND while the command succeeds.
+func TestBinary_FinancialsBatch(t *testing.T) {
+	server := mockFinancialsServer()
+
+	r := runBinary(map[string]string{
+		"CNS_QUOTE_ENDPOINT": server.URL + "/q=%s",
+	}, "financials", "600519,000001", "--json")
+
+	if r.ExitCode != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", r.ExitCode, r.Stderr)
+	}
+
+	var result struct {
+		Items []struct {
+			Target string         `json:"target"`
+			OK     bool           `json:"ok"`
+			Data   map[string]any `json:"data"`
+			Error  *struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		} `json:"items"`
+		Summary struct {
+			Total     int `json:"total"`
+			Succeeded int `json:"succeeded"`
+			Failed    int `json:"failed"`
+		} `json:"summary"`
+	}
+	decodeData(t, r.Stdout, &result)
+
+	if result.Summary.Total != 2 || result.Summary.Succeeded != 1 || result.Summary.Failed != 1 {
+		t.Fatalf("summary = %+v, want total=2 succeeded=1 failed=1", result.Summary)
+	}
+	if result.Items[0].Target != "sh600519" || !result.Items[0].OK {
+		t.Errorf("items[0] = %+v, want sh600519 ok", result.Items[0])
+	}
+	if result.Items[1].Target != "sz000001" || result.Items[1].OK ||
+		result.Items[1].Error == nil || result.Items[1].Error.Code != "E_NOT_FOUND" {
+		t.Errorf("items[1] = %+v, want sz000001 E_NOT_FOUND", result.Items[1])
+	}
+}
+
+// TestBinary_MinuteRejectsMultiSymbol verifies minute adopts the plural input
+// convention but rejects multi-symbol input (deferred multi-fetch).
+func TestBinary_MinuteRejectsMultiSymbol(t *testing.T) {
+	r := runBinary(nil, "minute", "600519,000001", "--json")
+	if r.ExitCode != 2 {
+		t.Fatalf("exit code = %d, want 2 (validation); stderr: %s", r.ExitCode, r.Stderr)
+	}
+	env := decodeError(t, r.Stdout)
+	if env.Error.Code != "E_VALIDATION" {
+		t.Errorf("error code = %s, want E_VALIDATION", env.Error.Code)
 	}
 }
 
@@ -680,8 +853,7 @@ func TestBinary_FinancialsJSON(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Fatalf("exit code = %d, want 0; stderr: %s", r.ExitCode, r.Stderr)
 	}
-	var f map[string]any
-	decodeData(t, r.Stdout, &f)
+	f := financialsBatchFirstItemData(t, r.Stdout, "sh600519")
 	if f["pe_ratio"] != 19.52 {
 		t.Errorf("pe_ratio = %v, want 19.52", f["pe_ratio"])
 	}
@@ -752,8 +924,7 @@ func TestBinary_KlineDateRange(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Fatalf("exit code = %d, want 0; stderr: %s", r.ExitCode, r.Stderr)
 	}
-	var bars []map[string]any
-	decodeData(t, r.Stdout, &bars)
+	bars := klineBatchFirstItemBars(t, r.Stdout, "sh600519")
 	if len(bars) != 1 || bars[0]["date"] != "2024-01-02" {
 		t.Errorf("unexpected bars: %#v", bars)
 	}
