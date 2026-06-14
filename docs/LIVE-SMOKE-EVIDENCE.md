@@ -82,3 +82,49 @@ command was re-pointed at a source verified working live:
   endpoint (`push2.eastmoney.com/api/qt/stock/fflow/kline/get`) is intermittently
   EOF from this environment and could not be honestly live-verified this round.
   Both will return with a proper, verified data source in a future round.
+
+## Batch commands — live smoke (2026-06-15)
+
+The new comma-separated batch surface (`kline` / `financials` aggregated
+`items[]`/`summary` envelope, `minute` plural-input single-symbol guard) smoked
+against the same public upstreams. All commands here are read-only quote
+queries — there is no destructive or irreversible batch in this tool — so every
+case below was run live against real endpoints.
+
+- **Environment:** Windows, Go (built from `./cmd/cnstock-cli`); Tencent
+  (`qt.gtimg.cn`) for financials, Eastmoney for kline; live public internet.
+- **Method:** each invoked with `--format json`; asserted envelope `ok`, the
+  `items[]` per-target shape, `summary` tally (`total = succeeded + failed`),
+  per-item `{code, retryable}` taxonomy, and exit code.
+- **Small batches only:** 2–3 symbols per call (贵州茅台/平安银行/中国平安),
+  no writes, nothing to clean up.
+
+| Case | Command | Result | Method |
+|---|---|---|---|
+| Batch happy-path (kline) | `kline 600519,000001,sh601318 --period day` | PASS (live) | 3 items ok, ordered, normalized targets; summary 3/3/0 |
+| Batch happy-path (financials) | `financials 600519,000001,sh601318` | PASS (live) | 3 items ok, names resolved; summary 3/3/0 |
+| Partial-failure aggregation | `kline 600519,ZZZ999,000001` | PASS (live) | `ok:true`, summary 3/2/1, bad item carries `E_NOT_FOUND` retryable=false; good items unaffected |
+| `--continue-on-error=false` stop+skip | `kline ZZZ999,600519,000001 --continue-on-error=false` | PASS (live) | stops at first failure, summary failed=1 **skipped=2**, only failed item present |
+| Dedup + first-seen order | `kline 000001,600519,000001` | PASS (live) | duplicate collapsed → total=2, order `[sz000001, sh600519]` |
+| minute multi-symbol reject | `minute 600519,000001` | PASS (live) | `E_VALIDATION` exit 2, honest "not yet available" — no silent first-only fetch |
+| Whole-batch arg error | `kline ""` | PASS (live) | top-level `ok:false` `E_VALIDATION` exit 2 |
+| minute single still works | `minute 600519` | PASS (live) | 242 ticks |
+| reference self-description | `reference` | PASS (live) | `kline_batch` + `financials_batch` schemas present |
+
+**Not tested / not applicable:** no destructive batch (delete / merge / mass
+send) exists in this tool, so the "dry-run-only" red line had nothing to gate.
+No credentials are involved — all upstreams are anonymous public quote APIs.
+
+Corroborated by `go test ./...` (cmd, internal/api batch aggregation, e2e
+binary batch cases, lint) — all green.
+
+### Reproduce
+
+```bash
+go build -o cnstock-cli ./cmd/cnstock-cli
+./cnstock-cli kline 600519,000001,sh601318 --period day --limit 2 --format json
+./cnstock-cli financials 600519,000001,sh601318 --format json
+./cnstock-cli kline 600519,ZZZ999,000001 --format json                       # partial failure
+./cnstock-cli kline ZZZ999,600519,000001 --continue-on-error=false --format json  # stop+skipped
+./cnstock-cli minute 600519,000001 --format json                             # E_VALIDATION
+```
