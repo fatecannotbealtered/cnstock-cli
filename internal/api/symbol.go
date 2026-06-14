@@ -142,6 +142,54 @@ func NormalizeSymbols(symbols string) ([]string, error) {
 	return result, nil
 }
 
+// ParseSymbolList normalizes comma-separated batch symbols for batch commands,
+// de-duplicating while preserving first-seen input order so the agent can zip
+// per-item results back to inputs deterministically. An empty list is a
+// validation error (never a silent no-op); the count is capped like quote.
+func ParseSymbolList(symbols string) ([]string, error) {
+	parts := strings.Split(symbols, ",")
+	var result []string
+	seen := make(map[string]bool)
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		norm, err := NormalizeSymbol(p)
+		if err != nil {
+			return nil, err
+		}
+		if seen[norm] {
+			continue
+		}
+		seen[norm] = true
+		result = append(result, norm)
+	}
+	if len(result) == 0 {
+		return nil, newValidationError("at least one symbol is required")
+	}
+	if len(result) > maxBatchSize {
+		return nil, newValidationError("batch query supports up to %d symbols", maxBatchSize)
+	}
+	return result, nil
+}
+
+// SingleSymbol parses the plural --symbols input but enforces exactly one
+// normalized symbol. It backs commands that adopt the plural input convention
+// for consistency while their multi-symbol fetch is still deferred (e.g.
+// minute, whose upstream multi-code support is unconfirmed). A multi-symbol
+// input is a validation error, not a silent first-only fetch.
+func SingleSymbol(symbols string) (string, error) {
+	normalized, err := ParseSymbolList(symbols)
+	if err != nil {
+		return "", err
+	}
+	if len(normalized) > 1 {
+		return "", newValidationError("minute supports a single symbol for now; multi-symbol intraday is not yet available")
+	}
+	return normalized[0], nil
+}
+
 // EastmoneySecID converts a Tencent-style symbol (e.g. "sh600519") to an
 // Eastmoney secid ("1.600519"). Eastmoney prefixes Shanghai/Beijing-listed
 // codes with "1." and Shenzhen with "0."; HK/US are not addressable here and
