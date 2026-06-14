@@ -48,18 +48,10 @@ func runFinancials(cmd *cobra.Command, args []string) error {
 		{"Price", formatPrice(f.Price)},
 		{"Market Cap", formatLargeNum(f.MarketCap)},
 		{"Float Market Cap", formatLargeNum(f.FloatMarketCap)},
-		{"PE (TTM)", formatPrice(f.PeTTM)},
-		{"PE (static)", formatPrice(f.PeStatic)},
+		{"PE", formatPrice(f.PeRatio)},
 		{"PB", formatPrice(f.Pb)},
-		{"EPS", formatPrice(f.Eps)},
-		{"BVPS", formatPrice(f.Bvps)},
-		{"Dividend Yield", formatPct(f.DividendYield)},
-		{"ROE", formatPct(f.Roe)},
-		{"Revenue", formatLargeNum(f.Revenue)},
-		{"Net Profit", formatLargeNum(f.NetProfit)},
-		{"Gross Margin", formatPct(f.GrossMargin)},
-		{"Total Shares", formatLargeNum(f.TotalShares)},
-		{"Float Shares", formatLargeNum(f.FloatShares)},
+		{"Turnover Rate", formatPct(f.TurnoverRate)},
+		{"Amount", formatLargeNum(f.Amount)},
 	}
 	output.Table(headers, rows)
 

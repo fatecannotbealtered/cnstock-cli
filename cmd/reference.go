@@ -165,14 +165,8 @@ func buildReference() referenceData {
 				{Name: "--from", Type: "date", Description: "Start date YYYY-MM-DD; fetch the date-bounded bars (limit still caps the count)."},
 				{Name: "--to", Type: "date", Description: "End date YYYY-MM-DD for the date-bounded range."},
 			}},
-			{Path: "financials", Type: "query", Description: "Company fundamentals: market cap, PE, PB, EPS, dividend yield, ROE, revenue, and net profit.", PermissionTier: "read-only", RawSupported: true, Pagination: "none", OutputSchema: "financials", Examples: []string{"cnstock-cli financials 600519 --compact"}, Params: []referenceParam{
-				{Name: "symbol", Type: "string", Required: true, Description: "A-share stock symbol."},
-			}},
-			{Path: "constituents", Type: "query", Description: "List the constituent stocks of an index or board with code, name, price, change, and weight.", PermissionTier: "read-only", RawSupported: true, Pagination: "upstream-limited list (up to 500 rows)", OutputSchema: "constituent[]", Examples: []string{"cnstock-cli constituents BK0475 --compact"}, Params: []referenceParam{
-				{Name: "index", Type: "string", Required: true, Description: "Eastmoney board/index code (e.g. BK0475)."},
-			}},
-			{Path: "moneyflow", Type: "query", Description: "Main-capital and north-bound money-flow figures for a symbol.", PermissionTier: "read-only", RawSupported: true, Pagination: "none", OutputSchema: "money_flow", Examples: []string{"cnstock-cli moneyflow 600519 --compact"}, Params: []referenceParam{
-				{Name: "symbol", Type: "string", Required: true, Description: "A-share stock symbol."},
+			{Path: "financials", Type: "query", Description: "Company valuation: total/float market cap, PE, PB, turnover rate, and amount.", PermissionTier: "read-only", RawSupported: true, Pagination: "none", OutputSchema: "financials", Examples: []string{"cnstock-cli financials 600519 --compact"}, Params: []referenceParam{
+				{Name: "symbol", Type: "string", Required: true, Description: "Stock or index symbol; auto-normalized across CN/HK/US."},
 			}},
 			{Path: "minute", Type: "query", Description: "Intraday minute ticks for the current trading day.", PermissionTier: "read-only", RawSupported: true, Pagination: "none; upstream returns current-day minutes", OutputSchema: "minute_tick[]", Examples: []string{"cnstock-cli minute 600519 --compact"}, Params: []referenceParam{
 				{Name: "symbol", Type: "string", Required: true, Description: "Stock, fund, or index symbol."},
@@ -209,9 +203,6 @@ func buildReference() referenceData {
 			{Name: "CNS_BREADTH_ENDPOINT", Description: "Market breadth endpoint URL.", Secret: false},
 			{Name: "CNS_LIMITUP_ENDPOINT", Description: "Limit-up pool endpoint URL template; must contain %s for date.", Secret: false},
 			{Name: "CNS_LIMITDOWN_ENDPOINT", Description: "Limit-down pool endpoint URL template; must contain %s for date.", Secret: false},
-			{Name: "CNS_FINANCIALS_ENDPOINT", Description: "Company-fundamentals endpoint URL template; must contain %s for secid.", Secret: false},
-			{Name: "CNS_CONSTITUENTS_ENDPOINT", Description: "Board-constituents endpoint URL template; must contain %s for the board code.", Secret: false},
-			{Name: "CNS_MONEYFLOW_ENDPOINT", Description: "Money-flow endpoint URL template; must contain %s for secid.", Secret: false},
 			{Name: "CNS_UPDATE_ENDPOINT", Description: "GitHub latest-release endpoint used by update.", Secret: false},
 		},
 		ExitCodes: []referenceExitCode{
@@ -248,9 +239,7 @@ func buildReference() referenceData {
 			"search_result[]": {Shape: "array", Fields: []string{"symbol", "name", "market", "pinyin", "_untrusted"}, UntrustedFields: []string{"name", "pinyin"}},
 			"sector[]":        {Shape: "array", Fields: []string{"code", "name", "change_pct", "change", "price", "turnover", "volume", "turnover_rate", "advance_decline", "leading_stock", "_untrusted"}, UntrustedFields: []string{"name", "advance_decline", "leading_stock.name"}},
 			"market_stats":    {Shape: "object", Fields: []string{"advancing", "declining", "flat", "limit_up", "limit_down", "amount", "markets", "warnings"}, UntrustedFields: []string{"markets[].name"}},
-			"financials":      {Shape: "object", Fields: []string{"symbol", "market", "name", "code", "price", "market_cap", "float_market_cap", "pe_ttm", "pe_static", "pb", "eps", "bvps", "dividend_yield", "roe", "revenue", "net_profit", "gross_margin", "total_shares", "float_shares", "warnings", "_untrusted"}, UntrustedFields: []string{"name"}},
-			"constituent[]":   {Shape: "array", Fields: []string{"code", "name", "price", "change_pct", "weight", "_untrusted"}, UntrustedFields: []string{"name"}},
-			"money_flow":      {Shape: "object", Fields: []string{"symbol", "market", "name", "code", "main_inflow", "main_inflow_pct", "super_inflow", "large_inflow", "medium_inflow", "small_inflow", "northbound_flow", "warnings", "_untrusted"}, UntrustedFields: []string{"name"}},
+			"financials":      {Shape: "object", Fields: []string{"symbol", "market", "name", "code", "price", "market_cap", "float_market_cap", "pe_ratio", "pb", "turnover_rate", "amount", "warnings", "_untrusted"}, UntrustedFields: []string{"name"}},
 			"update_report":   {Shape: "object", Fields: []string{"current_version", "latest_version", "target_version", "status", "update_available", "install_method", "release_url", "recommended_action", "commands", "signature_status", "skill_sync_command", "skill_sync_status", "confirm_token", "expires_at", "preview", "post_update_action", "notes"}},
 			"changelog":       {Shape: "object", Fields: []string{"current_version", "since", "entries"}},
 			"context":         {Shape: "object", Fields: []string{"version", "go_version", "os", "arch", "environment", "account", "risk_tier", "risk_summary", "permission_tier", "default_format", "formats", "commands", "config", "credentials", "endpoints"}},
@@ -279,8 +268,6 @@ func referenceMarkdown() string {
 | quote | query | quote[] |
 | kline | query | kline_bar[] |
 | financials | query | financials |
-| constituents | query | constituent[] |
-| moneyflow | query | money_flow |
 | minute | query | minute_tick[] |
 | search | query | search_result[] |
 | sectors | query | sector[] |

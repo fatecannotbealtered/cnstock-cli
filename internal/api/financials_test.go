@@ -2,14 +2,33 @@ package api
 
 import "testing"
 
-const financialsFixture = `{"rc":0,"data":{
-  "f57":"600519","f58":"贵州茅台","f43":1800.00,"f116":2261000000000,"f117":2261000000000,
-  "f162":33.5,"f163":34.1,"f167":9.8,"f55":42.5,"f92":430.2,"f173":1.2,"f105":31.4,
-  "f183":120000000000,"f186":60000000000,"f164":91.5,"f84":1256000000,"f85":1256000000
-}}`
+// financialsFixture mirrors the real qt.gtimg.cn quote string for sh600519,
+// trimmed but preserving the valuation tail indices (37=amount万, 38=换手率,
+// 39=PE, 44=流通市值亿, 45=总市值亿, 46=PB).
+func financialsFixture() string {
+	parts := make([]string, 50)
+	parts[0] = "1"
+	parts[1] = "贵州茅台"
+	parts[2] = "600519"
+	parts[3] = "1291.91"
+	parts[37] = "647791"   // 成交额 (万) -> 6.47791e9 yuan
+	parts[38] = "0.40"     // 换手率 %
+	parts[39] = "19.52"    // 市盈率
+	parts[44] = "16149.93" // 流通市值 (亿) -> 1.614993e12 yuan
+	parts[45] = "16149.93" // 总市值 (亿)
+	parts[46] = "6.03"     // 市净率
+	line := ""
+	for i, p := range parts {
+		if i > 0 {
+			line += "~"
+		}
+		line += p
+	}
+	return `v_sh600519="` + line + `";`
+}
 
 func TestParseFinancialsResponse(t *testing.T) {
-	f, err := parseFinancialsResponse(financialsFixture, "sh600519")
+	f, err := parseFinancialsResponse(financialsFixture(), "sh600519")
 	if err != nil {
 		t.Fatalf("parseFinancialsResponse error: %v", err)
 	}
@@ -19,17 +38,26 @@ func TestParseFinancialsResponse(t *testing.T) {
 	if f.Code != "600519" {
 		t.Errorf("Code = %q, want 600519", f.Code)
 	}
-	if f.PeTTM == nil || *f.PeTTM != 33.5 {
-		t.Errorf("PeTTM = %v, want 33.5", f.PeTTM)
+	if f.Price == nil || *f.Price != 1291.91 {
+		t.Errorf("Price = %v, want 1291.91", f.Price)
 	}
-	if f.Pb == nil || *f.Pb != 9.8 {
-		t.Errorf("Pb = %v, want 9.8", f.Pb)
+	if f.PeRatio == nil || *f.PeRatio != 19.52 {
+		t.Errorf("PeRatio = %v, want 19.52", f.PeRatio)
 	}
-	if f.Roe == nil || *f.Roe != 31.4 {
-		t.Errorf("Roe = %v, want 31.4", f.Roe)
+	if f.Pb == nil || *f.Pb != 6.03 {
+		t.Errorf("Pb = %v, want 6.03", f.Pb)
 	}
-	if f.MarketCap == nil || *f.MarketCap != 2261000000000 {
-		t.Errorf("MarketCap = %v, want 2261000000000", f.MarketCap)
+	if f.TurnoverRate == nil || *f.TurnoverRate != 0.40 {
+		t.Errorf("TurnoverRate = %v, want 0.40", f.TurnoverRate)
+	}
+	if f.MarketCap == nil || *f.MarketCap != 16149.93*1e8 {
+		t.Errorf("MarketCap = %v, want %v", f.MarketCap, 16149.93*1e8)
+	}
+	if f.FloatMarketCap == nil || *f.FloatMarketCap != 16149.93*1e8 {
+		t.Errorf("FloatMarketCap = %v, want %v", f.FloatMarketCap, 16149.93*1e8)
+	}
+	if f.Amount == nil || *f.Amount != 647791*1e4 {
+		t.Errorf("Amount = %v, want %v", f.Amount, 647791*1e4)
 	}
 	if len(f.Untrusted) == 0 {
 		t.Error("expected name in _untrusted")
@@ -37,25 +65,20 @@ func TestParseFinancialsResponse(t *testing.T) {
 }
 
 func TestParseFinancialsNotFound(t *testing.T) {
-	if _, err := parseFinancialsResponse(`{"rc":0,"data":null}`, "sh600519"); err == nil {
-		t.Error("expected NotFoundError for data:null")
+	// Tencent emits the pv_none_match sentinel for an unknown symbol.
+	if _, err := parseFinancialsResponse(`v_pv_none_match="1~~~";`, "sh000000"); err == nil {
+		t.Error("expected NotFoundError for pv_none_match sentinel")
 	} else if _, ok := err.(*NotFoundError); !ok {
 		t.Errorf("expected NotFoundError, got %T", err)
 	}
-}
-
-func TestParseFinancialsBadShape(t *testing.T) {
-	if _, err := parseFinancialsResponse(`not json`, "sh600519"); err == nil {
-		t.Error("expected error for invalid JSON")
-	}
-	if _, err := parseFinancialsResponse(`{"rc":0,"data":[1,2,3]}`, "sh600519"); err == nil {
-		t.Error("expected error for non-object data")
+	if _, err := parseFinancialsResponse(`garbage`, "sh600519"); err == nil {
+		t.Error("expected NotFoundError when no quote line is present")
 	}
 }
 
-func TestFetchFinancialsRejectsNonAShare(t *testing.T) {
-	if _, err := FetchFinancials(bg, NewClient(), "hk00700"); err == nil {
-		t.Error("expected validation error for HK symbol")
+func TestFetchFinancialsRejectsBadSymbol(t *testing.T) {
+	if _, err := FetchFinancials(bg, NewClient(), "   "); err == nil {
+		t.Error("expected validation error for empty symbol")
 	}
 }
 

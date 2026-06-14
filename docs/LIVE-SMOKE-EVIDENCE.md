@@ -58,15 +58,27 @@ go build -o cnstock-cli ./cmd/cnstock-cli
 ./cnstock-cli sectors --board hy --top 5 --format json
 ```
 
-> **Needs live verification:** the reverse-engineered Eastmoney endpoints behind
-> `financials`, `constituents`, and `moneyflow` (env vars `CNS_FINANCIALS_ENDPOINT`,
-> `CNS_CONSTITUENTS_ENDPOINT`, `CNS_MONEYFLOW_ENDPOINT`) are parsed defensively
-> against the standard push2 JSON shape but have NOT yet been live-smoked; the
-> exact `f`-field IDs and the board-code format for `constituents` must be
-> confirmed against the real upstream and adjusted:
->
-> ```bash
-> ./cnstock-cli financials 600519 --format json
-> ./cnstock-cli constituents BK0475 --format json
-> ./cnstock-cli moneyflow 600519 --format json
-> ```
+## `financials` — endpoint correction (2026-06-14)
+
+The reverse-engineered Eastmoney `push2/api/qt/stock/get` endpoint that
+originally backed `financials` returns EMPTY/EOF from real networks, so the
+command was re-pointed at a source verified working live:
+
+- **`financials` now parses the same Tencent quote string the `quote` command
+  uses** (`qt.gtimg.cn`, `CNS_QUOTE_ENDPOINT`). The `~`-delimited line carries
+  the valuation tail (index 37=成交额万, 38=换手率, 39=市盈率, 44=流通市值亿,
+  45=总市值亿, 46=市净率), cross-referenced against the existing quote parser
+  and confirmed against a live response. **Live result: PASS.**
+
+  ```bash
+  ./cnstock-cli financials 600519 --format json
+  # -> 贵州茅台: market_cap 1.615e12, float_market_cap 1.615e12,
+  #    pe_ratio 19.52, pb 6.03, turnover_rate 0.4, amount 6.478e9
+  ```
+
+- **`constituents` and `moneyflow` were dropped this round.** Index components
+  are not an Eastmoney "board" and no reliable simple public endpoint was found
+  (clist `fs=i:`/`fs=b:` returned empty). The `moneyflow` fund-flow kline
+  endpoint (`push2.eastmoney.com/api/qt/stock/fflow/kline/get`) is intermittently
+  EOF from this environment and could not be honestly live-verified this round.
+  Both will return with a proper, verified data source in a future round.

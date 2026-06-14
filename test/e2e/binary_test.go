@@ -166,27 +166,31 @@ func mockSearchServer() *httptest.Server {
 	}))
 }
 
-// mockFinancialsServer returns an Eastmoney stock/get-style fundamentals payload.
+// mockFinancialsServer returns a Tencent quote string carrying the valuation
+// tail (financials reuses the quote endpoint). Indices: 37=amount万, 38=换手率,
+// 39=PE, 44=流通市值亿, 45=总市值亿, 46=PB.
 func mockFinancialsServer() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"rc":0,"data":{"f57":"600519","f58":"贵州茅台","f43":1800.00,"f116":2261000000000,"f117":2261000000000,"f162":33.5,"f163":34.1,"f167":9.8,"f55":42.5,"f92":430.2,"f173":1.2,"f105":31.4,"f183":120000000000,"f186":60000000000,"f164":91.5,"f84":1256000000,"f85":1256000000}}`))
-	}))
-}
-
-// mockConstituentsServer returns an Eastmoney clist-style board-members payload.
-func mockConstituentsServer() *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"rc":0,"data":{"total":2,"diff":[{"f12":"600519","f14":"贵州茅台","f2":1800.00,"f3":1.33,"f127":5.4},{"f12":"000858","f14":"五粮液","f2":150.20,"f3":-0.85}]}}`))
-	}))
-}
-
-// mockMoneyFlowServer returns an Eastmoney stock/get-style money-flow payload.
-func mockMoneyFlowServer() *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"rc":0,"data":{"f57":"600519","f58":"贵州茅台","f135":123456789,"f136":2.5,"f137":80000000,"f139":40000000,"f141":-10000000,"f143":-110000000,"f148":50000000}}`))
+		fields := make([]string, 50)
+		fields[0] = "1"
+		fields[1] = "贵州茅台"
+		fields[2] = "600519"
+		fields[3] = "1291.91"
+		fields[37] = "647791"   // 成交额 万
+		fields[38] = "0.40"     // 换手率
+		fields[39] = "19.52"    // 市盈率
+		fields[44] = "16149.93" // 流通市值 亿
+		fields[45] = "16149.93" // 总市值 亿
+		fields[46] = "6.03"     // 市净率
+		var line string
+		for i, f := range fields {
+			if i > 0 {
+				line += "~"
+			}
+			line += f
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=gb18030")
+		_, _ = w.Write([]byte("v_sh600519=\"" + line + "\";"))
 	}))
 }
 
@@ -670,7 +674,7 @@ func TestBinary_FinancialsJSON(t *testing.T) {
 	server := mockFinancialsServer()
 
 	r := runBinary(map[string]string{
-		"CNS_FINANCIALS_ENDPOINT": server.URL + "/api/qt/stock/get?secid=%s",
+		"CNS_QUOTE_ENDPOINT": server.URL + "/q=%s",
 	}, "financials", "600519", "--json")
 
 	if r.ExitCode != 0 {
@@ -678,11 +682,20 @@ func TestBinary_FinancialsJSON(t *testing.T) {
 	}
 	var f map[string]any
 	decodeData(t, r.Stdout, &f)
-	if f["pe_ttm"] != 33.5 {
-		t.Errorf("pe_ttm = %v, want 33.5", f["pe_ttm"])
+	if f["pe_ratio"] != 19.52 {
+		t.Errorf("pe_ratio = %v, want 19.52", f["pe_ratio"])
 	}
-	if f["market_cap"].(float64) != 2261000000000 {
-		t.Errorf("market_cap = %v, want 2261000000000", f["market_cap"])
+	if f["pb"] != 6.03 {
+		t.Errorf("pb = %v, want 6.03", f["pb"])
+	}
+	if f["turnover_rate"] != 0.40 {
+		t.Errorf("turnover_rate = %v, want 0.40", f["turnover_rate"])
+	}
+	if f["market_cap"].(float64) != 16149.93*1e8 {
+		t.Errorf("market_cap = %v, want %v", f["market_cap"], 16149.93*1e8)
+	}
+	if f["amount"].(float64) != 647791*1e4 {
+		t.Errorf("amount = %v, want %v", f["amount"], 647791*1e4)
 	}
 	untrusted, ok := f["_untrusted"].([]any)
 	if !ok || len(untrusted) == 0 {
@@ -690,57 +703,14 @@ func TestBinary_FinancialsJSON(t *testing.T) {
 	}
 }
 
-func TestBinary_FinancialsRejectsNonAShare(t *testing.T) {
-	r := runBinary(nil, "financials", "hk00700", "--json")
+func TestBinary_FinancialsRejectsEmptySymbol(t *testing.T) {
+	r := runBinary(nil, "financials", "   ", "--json")
 	if r.ExitCode != 2 {
 		t.Errorf("exit code = %d, want 2 (validation); stderr: %s", r.ExitCode, r.Stderr)
 	}
 	env := decodeError(t, r.Stdout)
 	if env.Error.Code != "E_VALIDATION" {
 		t.Errorf("error code = %s, want E_VALIDATION", env.Error.Code)
-	}
-}
-
-func TestBinary_ConstituentsJSON(t *testing.T) {
-	server := mockConstituentsServer()
-
-	r := runBinary(map[string]string{
-		"CNS_CONSTITUENTS_ENDPOINT": server.URL + "/api/qt/clist/get?fs=b:%s",
-	}, "constituents", "BK0475", "--json")
-
-	if r.ExitCode != 0 {
-		t.Fatalf("exit code = %d, want 0; stderr: %s", r.ExitCode, r.Stderr)
-	}
-	var members []map[string]any
-	decodeData(t, r.Stdout, &members)
-	if len(members) != 2 {
-		t.Fatalf("expected 2 constituents, got %d", len(members))
-	}
-	if members[0]["code"] != "600519" {
-		t.Errorf("constituent[0].code = %v, want 600519", members[0]["code"])
-	}
-	if members[0]["change_pct"] != 1.33 {
-		t.Errorf("constituent[0].change_pct = %v, want 1.33", members[0]["change_pct"])
-	}
-}
-
-func TestBinary_MoneyflowJSON(t *testing.T) {
-	server := mockMoneyFlowServer()
-
-	r := runBinary(map[string]string{
-		"CNS_MONEYFLOW_ENDPOINT": server.URL + "/api/qt/stock/get?secid=%s",
-	}, "moneyflow", "600519", "--json")
-
-	if r.ExitCode != 0 {
-		t.Fatalf("exit code = %d, want 0; stderr: %s", r.ExitCode, r.Stderr)
-	}
-	var mf map[string]any
-	decodeData(t, r.Stdout, &mf)
-	if mf["main_inflow"].(float64) != 123456789 {
-		t.Errorf("main_inflow = %v, want 123456789", mf["main_inflow"])
-	}
-	if mf["northbound_flow"].(float64) != 50000000 {
-		t.Errorf("northbound_flow = %v, want 50000000", mf["northbound_flow"])
 	}
 }
 
