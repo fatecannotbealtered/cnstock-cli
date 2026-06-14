@@ -42,9 +42,6 @@ var endpointDefs = []endpointDef{
 	{"breadth", "CNS_BREADTH_ENDPOINT", BreadthEndpoint},
 	{"limit_up", "CNS_LIMITUP_ENDPOINT", LimitUpEndpoint},
 	{"limit_down", "CNS_LIMITDOWN_ENDPOINT", LimitDownEndpoint},
-	{"financials", "CNS_FINANCIALS_ENDPOINT", FinancialsEndpoint},
-	{"constituents", "CNS_CONSTITUENTS_ENDPOINT", ConstituentsEndpoint},
-	{"moneyflow", "CNS_MONEYFLOW_ENDPOINT", MoneyFlowEndpoint},
 }
 
 // Endpoints returns metadata for every configurable endpoint, including whether
@@ -121,7 +118,5 @@ func ProbeTargets() []ProbeTarget {
 		{"search", ResolveSearchURL(url.QueryEscape("test"))},
 		{"rank", ResolveRankURL("hy", "down", 1)},
 		{"breadth", ResolveBreadthURL()},
-		{"financials", ResolveFinancialsURL("1.600519")},
-		{"moneyflow", ResolveMoneyFlowURL("1.600519")},
 	}
 }

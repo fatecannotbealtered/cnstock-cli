@@ -2,78 +2,73 @@ package api
 
 import (
 	"context"
-	"encoding/json"
+	"regexp"
+	"strings"
 )
 
-// FetchFinancials fetches company fundamentals (market cap, PE, PB, EPS, ROE,
-// revenue/net-profit, etc.) for an A-share symbol from Eastmoney's stock/get
-// endpoint.
-//
-// REVERSE-ENGINEERED endpoint: the field-ID mapping below is best-effort and
-// needs live verification. Parsing is defensive — an unexpected shape degrades
-// to E_NOT_FOUND/E_SERVER rather than panicking, and absent fields stay nil.
+// Tencent quote-string field indices for the valuation tail (0-based, after the
+// regex strips the `v_<symbol>=` wrapper). Cross-referenced against the quote
+// parser (which already reads amount=37, turnover=38, pe=39) and verified live
+// against qt.gtimg.cn for A-shares. Market-cap fields are denominated in 亿
+// (1e8 yuan), amount in 万 (1e4 yuan).
+const (
+	finIdxAmount       = 37 // 成交额 (万)
+	finIdxTurnoverRate = 38 // 换手率 (%)
+	finIdxPe           = 39 // 市盈率
+	finIdxFloatCap     = 44 // 流通市值 (亿)
+	finIdxMarketCap    = 45 // 总市值 (亿)
+	finIdxPb           = 46 // 市净率
+)
+
+var financialsLineRe = regexp.MustCompile(`v_(\w+)="(.*)"`)
+
+// FetchFinancials fetches company fundamentals (market cap, PE, PB, turnover,
+// amount) for a symbol from the same Tencent quote string the quote command
+// parses (qt.gtimg.cn). Reusing that reliable endpoint avoids the empty/EOF
+// behavior of Eastmoney's stock/get from many networks.
 func FetchFinancials(ctx context.Context, client *Client, symbol string) (*Financials, error) {
-	secid, err := EastmoneySecID(symbol)
+	normalized, err := NormalizeSymbol(symbol)
 	if err != nil {
 		return nil, err
 	}
-	text, err := client.GetString(ctx, ResolveFinancialsURL(secid))
+	text, err := client.GetString(ctx, ResolveQuoteURL(normalized))
 	if err != nil {
 		return nil, err
 	}
-	return parseFinancialsResponse(text, symbol)
+	return parseFinancialsResponse(text, normalized)
 }
 
-// FetchFinancialsRaw returns the raw upstream fundamentals response.
+// FetchFinancialsRaw returns the raw upstream quote string backing financials.
 func FetchFinancialsRaw(ctx context.Context, client *Client, symbol string) (string, error) {
-	secid, err := EastmoneySecID(symbol)
+	normalized, err := NormalizeSymbol(symbol)
 	if err != nil {
 		return "", err
 	}
-	return client.GetString(ctx, ResolveFinancialsURL(secid))
+	return client.GetString(ctx, ResolveQuoteURL(normalized))
 }
 
 func parseFinancialsResponse(text, symbol string) (*Financials, error) {
-	// Eastmoney stock/get wraps everything in a "data" object; numeric fields are
-	// f-coded. Strings (name/code) ride as JSON strings, numbers as JSON numbers.
-	var resp struct {
-		Rc   int             `json:"rc"`
-		Data json.RawMessage `json:"data"`
-	}
-	if err := json.Unmarshal([]byte(text), &resp); err != nil {
-		return nil, newServerError("financials response is not valid JSON: %v", err)
-	}
-	// Upstream returns data:null for an unknown secid.
-	if len(resp.Data) == 0 || string(resp.Data) == "null" {
+	match := financialsLineRe.FindStringSubmatch(text)
+	// Tencent emits v_pv_none_match for an unknown symbol; treat that and any
+	// missing line as not-found.
+	if match == nil || match[1] == "pv_none_match" || strings.TrimSpace(match[2]) == "" {
 		return nil, newNotFoundError("no fundamentals for %s", symbol)
 	}
 
-	var d map[string]json.RawMessage
-	if err := json.Unmarshal(resp.Data, &d); err != nil {
-		return nil, newServerError("financials data is not an object")
-	}
-
-	market := DetectMarket(func() string { s, _ := NormalizeSymbol(symbol); return s }())
+	parts := strings.Split(match[2], "~")
+	market := DetectMarket(symbol)
 	f := &Financials{
 		Symbol:         symbol,
 		Market:         MarketName[market],
-		Name:           emField(d, "f58"),
-		Code:           emField(d, "f57"),
-		Price:          emFloat(d, "f43"),
-		MarketCap:      emFloat(d, "f116"),
-		FloatMarketCap: emFloat(d, "f117"),
-		PeTTM:          emFloat(d, "f162"),
-		PeStatic:       emFloat(d, "f163"),
-		Pb:             emFloat(d, "f167"),
-		Eps:            emFloat(d, "f55"),
-		Bvps:           emFloat(d, "f92"),
-		DividendYield:  emFloat(d, "f173"),
-		Roe:            emFloat(d, "f105"),
-		Revenue:        emFloat(d, "f183"),
-		NetProfit:      emFloat(d, "f186"),
-		GrossMargin:    emFloat(d, "f164"),
-		TotalShares:    emFloat(d, "f84"),
-		FloatShares:    emFloat(d, "f85"),
+		Name:           getStr(parts, 1),
+		Code:           getStr(parts, 2),
+		Price:          getFloat(parts, 3),
+		MarketCap:      scaleFloat(getFloat(parts, finIdxMarketCap), 1e8),
+		FloatMarketCap: scaleFloat(getFloat(parts, finIdxFloatCap), 1e8),
+		PeRatio:        getFloat(parts, finIdxPe),
+		Pb:             getFloat(parts, finIdxPb),
+		TurnoverRate:   getFloat(parts, finIdxTurnoverRate),
+		Amount:         scaleFloat(getFloat(parts, finIdxAmount), 1e4),
 	}
 	if f.Market == "" {
 		f.Market = "unknown"
@@ -84,43 +79,12 @@ func parseFinancialsResponse(text, symbol string) (*Financials, error) {
 	return f, nil
 }
 
-// emField returns a string-or-number f-coded field as a string ("" when absent
-// or when upstream uses its "-" sentinel for no-data).
-func emField(d map[string]json.RawMessage, key string) string {
-	raw, ok := d[key]
-	if !ok {
-		return ""
-	}
-	var s string
-	if err := json.Unmarshal(raw, &s); err == nil {
-		if s == "-" {
-			return ""
-		}
-		return s
-	}
-	// Fall back to a bare number rendered as text.
-	var n json.Number
-	if err := json.Unmarshal(raw, &n); err == nil {
-		return n.String()
-	}
-	return ""
-}
-
-// emFloat returns an f-coded numeric field as a float pointer. Eastmoney encodes
-// "no data" as the JSON string "-" or numeric sentinel; both yield nil.
-func emFloat(d map[string]json.RawMessage, key string) *float64 {
-	raw, ok := d[key]
-	if !ok {
+// scaleFloat multiplies a float pointer by factor, preserving nil. Tencent
+// reports market cap in 亿 and amount in 万; callers normalize to plain yuan.
+func scaleFloat(v *float64, factor float64) *float64 {
+	if v == nil {
 		return nil
 	}
-	var f float64
-	if err := json.Unmarshal(raw, &f); err == nil {
-		return &f
-	}
-	// Numbers occasionally arrive as quoted strings.
-	var s string
-	if err := json.Unmarshal(raw, &s); err == nil {
-		return parseOptionalFloat(s)
-	}
-	return nil
+	scaled := *v * factor
+	return &scaled
 }
