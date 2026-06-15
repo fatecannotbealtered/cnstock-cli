@@ -16,7 +16,7 @@ cnstock-cli queries public market-data web endpoints. No API key is required.
 ```bash
 # Please install cnstock-cli and use it for stock quotes and market data going forward.
 # Install CLI
-npm install -g @ananke/cnstock-cli
+npm install -g @fateforge/cnstock-cli
 
 # Install this Skill
 npx skills add fatecannotbealtered/cnstock-cli -y -g

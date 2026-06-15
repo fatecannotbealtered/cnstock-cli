@@ -33,10 +33,10 @@ func TestUpdateCommands(t *testing.T) {
 		method string
 		want   string
 	}{
-		{"npm", "npm install -g @ananke/cnstock-cli@latest"},
+		{"npm", "npm install -g @fateforge/cnstock-cli@latest"},
 		{"go", "go install github.com/fatecannotbealtered/cnstock-cli/cmd/cnstock-cli@latest"},
 		{"github", "Download the latest binary from https://github.com/fatecannotbealtered/cnstock-cli/releases/latest"},
-		{"unknown", "npm install -g @ananke/cnstock-cli@latest"},
+		{"unknown", "npm install -g @fateforge/cnstock-cli@latest"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.method, func(t *testing.T) {
