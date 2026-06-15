@@ -1,10 +1,10 @@
 ---
 name: cnstock-cli
-version: "1.1.3"
+version: "1.1.4"
 description: "Real-time quotes, K-line history, intraday minutes, stock search, sector ranking, and whole-market breadth for A-shares, HK stocks, US stocks, indices, and funds via cnstock-cli. Use when users ask for stock prices, market data, stock-code lookup, K-line history, intraday data, sectors, or Chinese market breadth."
 license: MIT
 user-invocable: true
-metadata: {"requires":{"bins":["cnstock-cli"],"min_version":"1.1.3"}}
+metadata: {"requires":{"bins":["cnstock-cli"],"min_version":"1.1.4"}}
 ---
 
 # cnstock-cli
@@ -16,7 +16,7 @@ cnstock-cli queries public market-data web endpoints. No API key is required.
 ```bash
 # Please install cnstock-cli and use it for stock quotes and market data going forward.
 # Install CLI
-npm install -g @fatecannotbealtered-/cnstock-cli
+npm install -g @ananke/cnstock-cli
 
 # Install this Skill
 npx skills add fatecannotbealtered/cnstock-cli -y -g

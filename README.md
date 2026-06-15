@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/fatecannotbealtered/cnstock-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/fatecannotbealtered/cnstock-cli/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fatecannotbealtered/cnstock-cli)](https://goreportcard.com/report/github.com/fatecannotbealtered/cnstock-cli)
-[![npm version](https://img.shields.io/npm/v/@fatecannotbealtered-/cnstock-cli.svg)](https://www.npmjs.com/package/@fatecannotbealtered-/cnstock-cli)
+[![npm version](https://img.shields.io/npm/v/@ananke/cnstock-cli.svg)](https://www.npmjs.com/package/@ananke/cnstock-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > Agent-native market lookup CLI for A-shares, HK stocks, US stocks, indices, funds, sectors, and whole-market breadth.
@@ -15,7 +15,7 @@ Paste this block into the AI Agent that will operate market data lookup. It inst
 
 ```bash
 # Install CLI and Agent Skill.
-npm install -g @fatecannotbealtered-/cnstock-cli
+npm install -g @ananke/cnstock-cli
 npx skills add fatecannotbealtered/cnstock-cli -y -g
 
 # Verify the agent contract before task commands.
