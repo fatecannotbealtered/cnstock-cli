@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/fatecannotbealtered/cnstock-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/fatecannotbealtered/cnstock-cli/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fatecannotbealtered/cnstock-cli)](https://goreportcard.com/report/github.com/fatecannotbealtered/cnstock-cli)
-[![npm version](https://img.shields.io/npm/v/@ananke/cnstock-cli.svg)](https://www.npmjs.com/package/@ananke/cnstock-cli)
+[![npm version](https://img.shields.io/npm/v/@fateforge/cnstock-cli.svg)](https://www.npmjs.com/package/@fateforge/cnstock-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > 面向 AI Agent 的市场查询 CLI，覆盖 A 股、港股、美股、指数、基金、板块和全市场宽度。
@@ -15,7 +15,7 @@
 
 ```bash
 # 安装 CLI 和 Agent Skill。
-npm install -g @ananke/cnstock-cli
+npm install -g @fateforge/cnstock-cli
 npx skills add fatecannotbealtered/cnstock-cli -y -g
 
 # 执行任务命令前验证 Agent 契约。
