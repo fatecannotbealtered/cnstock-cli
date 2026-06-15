@@ -22,7 +22,7 @@ import (
 
 const (
 	defaultLatestReleaseEndpoint = "https://api.github.com/repos/fatecannotbealtered/cnstock-cli/releases/latest"
-	npmPackageName               = "@fatecannotbealtered-/cnstock-cli"
+	npmPackageName               = "@ananke/cnstock-cli"
 	goInstallTarget              = "github.com/fatecannotbealtered/cnstock-cli/cmd/cnstock-cli"
 	latestReleaseURL             = "https://github.com/fatecannotbealtered/cnstock-cli/releases/latest"
 	updateSkillRepo              = "fatecannotbealtered/cnstock-cli"
@@ -286,7 +286,7 @@ func detectInstallMethod() string {
 	}
 	path := filepath.ToSlash(strings.ToLower(exe))
 	switch {
-	case strings.Contains(path, "node_modules") && strings.Contains(path, "@fatecannotbealtered-"):
+	case strings.Contains(path, "node_modules") && strings.Contains(path, "@ananke"):
 		return "npm"
 	case samePath(filepath.Dir(exe), os.Getenv("GOBIN")):
 		return "go"

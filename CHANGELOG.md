@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-06-15
+
 ### Added
 
 - **Batch market-data queries** following a single batch contract (plural input, per-item aggregated `items[]` + `summary`, `--continue-on-error`):
@@ -19,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `kline`, `financials`, and `minute` now take the plural `--symbols` input convention for cross-command consistency with `quote`; a single value degrades to a batch of one. `minute` adopts the plural input but rejects more than one symbol with `E_VALIDATION` (multi-symbol intraday fetch is deferred until the upstream's multi-code support is confirmed).
 - `reference` now exposes `kline_batch` / `financials_batch` output schemas (the `items[]`/`summary` shape, with `items[].data.name` listed under `untrusted_fields`) plus batch `examples[]`.
+- npm scope 迁移 `@fatecannotbealtered-` → `@ananke`（无横线 org 在 npm 被占，迁移到 `@ananke`）。
 
 ## [1.1.3] - 2026-06-14
 
@@ -157,7 +160,7 @@ Initial release of cnstock-cli.
   - Typed error codes: `VALIDATION_ERROR` (exit 2), `NOT_FOUND` (exit 4), `SERVER_ERROR` (exit 7), `NETWORK_ERROR` (exit 7), `UNKNOWN_ERROR` (exit 1).
   - `reference` command: structured listing of all commands, flags, and JSON schemas.
 - **Single binary**: No runtime dependencies. Cross-platform via GoReleaser (Linux/macOS/Windows, x64/arm64).
-- **npm distribution**: `npm install -g @fatecannotbealtered-/cnstock-cli` with bundled AI Agent Skill.
+- **npm distribution**: `npm install -g @ananke/cnstock-cli` with bundled AI Agent Skill.
 - **Bilingual README**: English + Chinese.
 - **Test suite**: 48 test cases across 3 layers — CLI smoke tests (6), API-level integration with httptest mock (28), and binary-level E2E with exec + httptest + env var endpoint injection (14).
 
