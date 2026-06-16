@@ -28,6 +28,10 @@
   "bin": {
     "cnstock-cli": "scripts/run.js"
   },
+  "scripts": {
+    "version": "node scripts/sync-version.js",
+    "check-version": "node scripts/check-version.js"
+  },
   "optionalDependencies": {
     "@fateforge/cnstock-cli-darwin-arm64": "1.1.6",
     "@fateforge/cnstock-cli-darwin-x64": "1.1.6",
