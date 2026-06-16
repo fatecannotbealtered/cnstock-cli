@@ -29,12 +29,12 @@
     "cnstock-cli": "scripts/run.js"
   },
   "optionalDependencies": {
-    "@fateforge/cnstock-cli-darwin-arm64": "1.1.4",
-    "@fateforge/cnstock-cli-darwin-x64": "1.1.4",
-    "@fateforge/cnstock-cli-linux-arm64": "1.1.4",
-    "@fateforge/cnstock-cli-linux-x64": "1.1.4",
-    "@fateforge/cnstock-cli-win32-arm64": "1.1.4",
-    "@fateforge/cnstock-cli-win32-x64": "1.1.4"
+    "@fateforge/cnstock-cli-darwin-arm64": "1.1.5",
+    "@fateforge/cnstock-cli-darwin-x64": "1.1.5",
+    "@fateforge/cnstock-cli-linux-arm64": "1.1.5",
+    "@fateforge/cnstock-cli-linux-x64": "1.1.5",
+    "@fateforge/cnstock-cli-win32-arm64": "1.1.5",
+    "@fateforge/cnstock-cli-win32-x64": "1.1.5"
   },
   "files": [
     "scripts/run.js",
