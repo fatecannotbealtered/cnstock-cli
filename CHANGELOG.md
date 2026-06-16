@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.5] - 2026-06-16
+
+### Changed
+
+- `update` is rewritten from package-manager delegation (npm/go install) to a self-contained verified binary self-update: download the release archive + `checksums.txt` + Sigstore bundle, verify the signature **in-process** (embedded `sigstore-go`, embedded TUF root) against this repo's tagged release-workflow identity, verify the archive SHA256, and replace the running binary — no dependency on npm/go/pip being installed. Releases are signed with `cosign sign-blob --new-bundle-format`.
+
+### Security
+
+- Verification is mandatory and fail-closed (no skip path); release-integrity failures return the non-retryable `E_INTEGRITY` code (exit 1) instead of a retryable network code.
+
 ## [1.1.4] - 2026-06-15
 
 ### Added
