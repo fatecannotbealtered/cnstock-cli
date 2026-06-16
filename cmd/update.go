@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -87,14 +86,6 @@ type updateConfirmPayload struct {
 }
 
 func runUpdate(cmd *cobra.Command, _ []string) error {
-	method := strings.ToLower(strings.TrimSpace(updateMethod))
-	if _, ok := validUpdateMethods[method]; !ok {
-		return handleError(api.NewValidationError("method only supports auto, npm, go, github"))
-	}
-	if method == "auto" {
-		method = detectInstallMethod()
-	}
-
 	client := &http.Client{Timeout: 10 * time.Second}
 	rel, raw, err := fetchLatestRelease(cmd.Context(), client, latestReleaseEndpoint())
 	if err != nil {
@@ -113,30 +104,24 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 	if target == "" {
 		target = latest
 	}
-	commandArgs := updateCommandArgs(method, target)
-	command := shellJoin(commandArgs)
-	commands := updateCommands(method)
+	command := binaryUpdateDescriptor(target)
 	skillCommand := updateSkillSyncCommand()
 	report := updateReport{
 		CurrentVersion:    version,
 		LatestVersion:     rel.TagName,
 		TargetVersion:     target,
 		Status:            "checked",
-		InstallMethod:     method,
+		InstallMethod:     "github-binary",
 		ReleaseURL:        rel.HTMLURL,
 		RecommendedAction: command,
-		Commands:          commands,
+		Commands:          []string{command},
 		PostUpdateAction:  "After installing, run `cnstock-cli changelog --since " + version + "` and `cnstock-cli reference --compact` before continuing.",
-		SignatureStatus:   updateSignatureStatus(method),
+		SignatureStatus:   "not_checked",
 		SkillSyncCommand:  skillCommand,
 		SkillSyncStatus:   "not_run",
 	}
 	if report.ReleaseURL == "" {
 		report.ReleaseURL = latestReleaseURL
-	}
-	if command == "" {
-		report.RecommendedAction = "Download the latest binary from " + latestReleaseURL
-		report.Notes = append(report.Notes, "automatic update is unsupported for method "+method)
 	}
 
 	if cmp, ok := compareVersions(version, rel.TagName); ok {
@@ -168,12 +153,9 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 	if strings.TrimSpace(confirmToken) == "" {
 		return updateFail("update requires --dry-run followed by --confirm <confirm_token>", output.ErrConfirm, ExitConfirmRequired)
 	}
-	payload, err := validateUpdateConfirmToken(confirmToken, method, target, command, skillCommand)
+	payload, err := validateUpdateConfirmToken(confirmToken, "github-binary", target, command, skillCommand)
 	if err != nil {
 		return updateFail(err.Error(), output.ErrConflict, ExitConflict)
-	}
-	if payload.Command == "" {
-		return updateFail("automatic update is unsupported for method "+method, output.ErrValidation, ExitBadArgs)
 	}
 	// Single-use enforcement: a confirm token may drive exactly one update. A
 	// replay (e.g. an agent retrying an update that timed out) is rejected so the
@@ -188,24 +170,46 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 		expiresUnix = expires.Unix()
 	}
 	markConfirmTokenConsumed(confirmToken, expiresUnix, now)
-	if err := runUpdateCommand(cmd.Context(), commandArgs); err != nil {
-		return updateFail("running update command: "+err.Error(), output.ErrNetwork, ExitNetwork)
+
+	// Download + verify (in-process Sigstore) + checksum + replace binary. No
+	// dependency on npm/go/pip; an unsigned or unverifiable release is refused.
+	status, sigStatus, _, err := performBinaryUpdate(cmd.Context(), target)
+	if err != nil {
+		if isIntegrityError(err) {
+			// Non-retryable: a missing/invalid signature or checksum mismatch is a
+			// supply-chain red flag, not a transient blip.
+			return updateFail(err.Error(), output.ErrIntegrity, ExitGeneric)
+		}
+		return updateFail("update failed: "+err.Error(), output.ErrNetwork, ExitNetwork)
 	}
 	if err := updateSkillSync(cmd.Context(), updateSkillRepo); err != nil {
 		return updateFail("syncing skill directory: "+err.Error(), output.ErrNetwork, ExitNetwork)
 	}
 
+	report.SignatureStatus = sigStatus
 	report.Status = "updated"
+	if status == "scheduled" {
+		report.Status = "scheduled"
+		report.Notes = append(report.Notes, "binary replacement scheduled; restart the command after this process exits")
+	}
 	report.SkillSyncStatus = "synced"
 	report.PostUpdateAction = "Run `cnstock-cli changelog --since " + version + " --compact` and `cnstock-cli reference --compact` before continuing."
 	emitUpdateReport(report)
 	return nil
 }
 
-func emitUpdateDryRun(cmd *cobra.Command, report updateReport, command string) error {
-	if command == "" {
-		return updateFail("automatic update is unsupported for method "+report.InstallMethod, output.ErrValidation, ExitBadArgs)
+// binaryUpdateDescriptor is the stable action string bound into the confirm
+// token and shown in the report. The dry-run and confirm paths compute it
+// identically so the token round-trips.
+func binaryUpdateDescriptor(target string) string {
+	t := normalizeVersion(target)
+	if t == "" {
+		t = "latest"
 	}
+	return "download + verify (sigstore) + replace cnstock-cli binary from GitHub release " + canonicalVersionTag(t)
+}
+
+func emitUpdateDryRun(cmd *cobra.Command, report updateReport, command string) error {
 	expires := updateNow().UTC().Add(15 * time.Minute).Truncate(time.Second)
 	payload := updateConfirmPayload{
 		Method:           report.InstallMethod,
@@ -220,20 +224,13 @@ func emitUpdateDryRun(cmd *cobra.Command, report updateReport, command string) e
 	report.Preview = map[string]any{
 		"action": "update cnstock-cli",
 		"changes": []map[string]any{
-			{"operation": "run package manager update", "command": command},
+			{"operation": "download, verify signature + checksum, replace binary", "command": command},
 			{"operation": "sync skill directory", "command": report.SkillSyncCommand},
 		},
 		"command_path": cmd.CommandPath(),
 	}
 	emitUpdateReport(report)
 	return nil
-}
-
-var validUpdateMethods = map[string]struct{}{
-	"auto":   {},
-	"npm":    {},
-	"go":     {},
-	"github": {},
 }
 
 func latestReleaseEndpoint() string {
@@ -277,115 +274,6 @@ func fetchLatestRelease(ctx context.Context, client *http.Client, endpoint strin
 		return latestRelease{}, raw, api.NewServerError("update response missing tag_name")
 	}
 	return rel, raw, nil
-}
-
-func detectInstallMethod() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return "npm"
-	}
-	path := filepath.ToSlash(strings.ToLower(exe))
-	switch {
-	case strings.Contains(path, "node_modules") && strings.Contains(path, "@fateforge"):
-		return "npm"
-	case samePath(filepath.Dir(exe), os.Getenv("GOBIN")):
-		return "go"
-	case strings.Contains(path, "/go/bin/"):
-		return "go"
-	default:
-		for _, gp := range filepath.SplitList(os.Getenv("GOPATH")) {
-			if samePath(filepath.Dir(exe), filepath.Join(gp, "bin")) {
-				return "go"
-			}
-		}
-		return "npm"
-	}
-}
-
-func samePath(a, b string) bool {
-	if strings.TrimSpace(b) == "" {
-		return false
-	}
-	aa, err := filepath.Abs(a)
-	if err != nil {
-		aa = a
-	}
-	bb, err := filepath.Abs(b)
-	if err != nil {
-		bb = b
-	}
-	return strings.EqualFold(filepath.Clean(aa), filepath.Clean(bb))
-}
-
-func updateCommands(method string) []string {
-	switch method {
-	case "go":
-		return []string{
-			shellJoin(updateCommandArgs("go", "latest")),
-			shellJoin(updateCommandArgs("npm", "latest")),
-			"Download the latest binary from " + latestReleaseURL,
-		}
-	case "github":
-		return []string{
-			"Download the latest binary from " + latestReleaseURL,
-			shellJoin(updateCommandArgs("npm", "latest")),
-			shellJoin(updateCommandArgs("go", "latest")),
-		}
-	default:
-		return []string{
-			shellJoin(updateCommandArgs("npm", "latest")),
-			shellJoin(updateCommandArgs("go", "latest")),
-			"Download the latest binary from " + latestReleaseURL,
-		}
-	}
-}
-
-func updateSignatureStatus(method string) string {
-	switch method {
-	case "npm":
-		return "handled_by_npm_installer"
-	case "go":
-		return "handled_by_go_module_verification"
-	case "github":
-		return "manual_release_verification_required"
-	default:
-		return "not_checked"
-	}
-}
-
-func updateCommandArgs(method, targetVersion string) []string {
-	target := normalizeVersion(targetVersion)
-	if target == "" {
-		target = "latest"
-	}
-	switch method {
-	case "npm":
-		return []string{"npm", "install", "-g", npmPackageName + "@" + target}
-	case "go":
-		tag := "latest"
-		if target != "latest" {
-			tag = canonicalVersionTag(target)
-		}
-		return []string{"go", "install", goInstallTarget + "@" + tag}
-	default:
-		return nil
-	}
-}
-
-func runUpdateCommand(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return api.NewValidationError("automatic update command is unavailable")
-	}
-	cmd := updateExecCommand(ctx, args[0], args[1:]...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		msg := strings.TrimSpace(string(out))
-		if msg != "" {
-			return fmt.Errorf("%w: %s", err, truncateUpdateMessage(msg, 500))
-		}
-		return err
-	}
-	return nil
 }
 
 func updateSkillSyncCommand() string {
@@ -552,21 +440,6 @@ func updateFail(msg string, code output.ErrorCode, exitCode int) error {
 	}
 	setExitCode(exitCode)
 	return ErrSilent
-}
-
-func shellJoin(args []string) string {
-	if len(args) == 0 {
-		return ""
-	}
-	out := make([]string, 0, len(args))
-	for _, arg := range args {
-		if strings.ContainsAny(arg, " \t\"'") {
-			out = append(out, strconv.Quote(arg))
-			continue
-		}
-		out = append(out, arg)
-	}
-	return strings.Join(out, " ")
 }
 
 func truncateUpdateMessage(s string, n int) string {

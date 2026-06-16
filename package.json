@@ -1,6 +1,6 @@
 {
   "name": "@fateforge/cnstock-cli",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "Market data lookup CLI for AI Agents - quotes, K-line bars, intraday minutes, stock search, sectors, and market breadth for A/HK/US symbols",
   "keywords": [
     "cnstock",

@@ -149,6 +149,7 @@ const (
 	ErrConfirm    ErrorCode = "E_CONFIRMATION_REQUIRED"
 	ErrConflict   ErrorCode = "E_CONFLICT"
 	ErrHuman      ErrorCode = "E_HUMAN_REQUIRED"
+	ErrIntegrity  ErrorCode = "E_INTEGRITY"
 	ErrUnknown    ErrorCode = "E_UNKNOWN"
 )
 
@@ -235,6 +236,8 @@ func hintForCode(code ErrorCode) string {
 		return "Refresh state and retry from a new dry-run"
 	case ErrHuman:
 		return "Complete the requested human action, then resume"
+	case ErrIntegrity:
+		return "Release integrity verification failed (signature or checksum); do not retry. Re-run update to fetch the current release, or report a possible supply-chain issue"
 	default:
 		return ""
 	}

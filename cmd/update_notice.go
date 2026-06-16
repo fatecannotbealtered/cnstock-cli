@@ -67,7 +67,6 @@ func refreshUpdateNotices(ctx context.Context, source string) []updateNotice {
 	if err != nil {
 		return readCachedUpdateNotices()
 	}
-	method := detectInstallMethod()
 	latest := normalizeVersion(rel.TagName)
 	available := false
 	if cmp, ok := compareVersions(version, rel.TagName); ok {
@@ -78,9 +77,9 @@ func refreshUpdateNotices(ctx context.Context, source string) []updateNotice {
 		LatestVersion:     rel.TagName,
 		TargetVersion:     latest,
 		UpdateAvailable:   &available,
-		InstallMethod:     method,
+		InstallMethod:     "github-binary",
 		ReleaseURL:        rel.HTMLURL,
-		RecommendedAction: shellJoin(updateCommandArgs(method, latest)),
+		RecommendedAction: binaryUpdateDescriptor(latest),
 	}
 	if report.ReleaseURL == "" {
 		report.ReleaseURL = latestReleaseURL
