@@ -1,11 +1,25 @@
-# cnstock-cli
+<h1 align="center">cnstock-cli</h1>
 
-[English](README.md) | [中文](README_zh.md)
+<p align="center">
+  <strong>面向 AI Agent 的市场数据 CLI &middot; JSON 优先 &middot; dry-run 防护</strong>
+</p>
 
-[![CI](https://github.com/fatecannotbealtered/cnstock-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/fatecannotbealtered/cnstock-cli/actions/workflows/ci.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/fatecannotbealtered/cnstock-cli)](https://goreportcard.com/report/github.com/fatecannotbealtered/cnstock-cli)
-[![npm version](https://img.shields.io/npm/v/@fateforge/cnstock-cli.svg)](https://www.npmjs.com/package/@fateforge/cnstock-cli)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+<p align="center">
+  <a href="README.md">English</a> &middot; <a href="README_zh.md">中文</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/fatecannotbealtered/cnstock-cli/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/fatecannotbealtered/cnstock-cli/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI"></a>
+  <a href="https://goreportcard.com/report/github.com/fatecannotbealtered/cnstock-cli"><img alt="Go Report" src="https://img.shields.io/badge/Go%20Report-checked-00ADD8?style=for-the-badge&logo=go&logoColor=white"></a>
+  <a href="https://www.npmjs.com/package/@fateforge/cnstock-cli"><img alt="npm" src="https://img.shields.io/npm/v/@fateforge/cnstock-cli?style=for-the-badge&logo=npm&logoColor=white&label=npm&color=CB3837"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-7C3AED?style=for-the-badge"></a>
+</p>
+
+<p align="center">
+  <img alt="Agent native" src="https://img.shields.io/badge/agent-native-111827?style=for-the-badge">
+  <img alt="JSON first" src="https://img.shields.io/badge/output-JSON--first-0891B2?style=for-the-badge">
+  <img alt="Dry-run guarded" src="https://img.shields.io/badge/writes-dry--run%20guarded-F59E0B?style=for-the-badge">
+</p>
 
 > 面向 AI Agent 的市场查询 CLI，覆盖 A 股、港股、美股、指数、基金、板块和全市场宽度。
 
