@@ -14,8 +14,9 @@
 把下面整段交给负责操作 市场数据查询 的 AI Agent。它会安装 CLI 和内置 Skill，提供最小运行上下文，并执行自描述预检。
 
 ```bash
-# 安装 CLI 和 Agent Skill。
+# 安装 CLI（全局 npm）。
 npm install -g @fateforge/cnstock-cli
+# 安装 Agent Skill —— 复制到你 agent 支持的 skills 目录。
 npx skills add fatecannotbealtered/cnstock-cli -y -g
 
 # 执行任务命令前验证 Agent 契约。

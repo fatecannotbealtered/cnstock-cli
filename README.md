@@ -14,8 +14,9 @@
 Paste this block into the AI Agent that will operate market data lookup. It installs the CLI and bundled Skill, provides the minimum runtime context, and runs the self-description preflight.
 
 ```bash
-# Install CLI and Agent Skill.
+# Install the CLI (global npm).
 npm install -g @fateforge/cnstock-cli
+# Install the Agent Skill — copies into your agent-supported skills directory.
 npx skills add fatecannotbealtered/cnstock-cli -y -g
 
 # Verify the agent contract before task commands.
