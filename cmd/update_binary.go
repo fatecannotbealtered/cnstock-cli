@@ -31,6 +31,17 @@ const (
 	updateGitHubAPI  = "https://api.github.com"
 )
 
+// Update stages, in execution order. Every update failure envelope reports the
+// stage it failed at so an agent can reason about the post-state (CLI-SPEC §14).
+const (
+	updateStageDiscover        = "discover"
+	updateStageDownload        = "download"
+	updateStageVerifySignature = "verify_signature"
+	updateStageVerifyChecksum  = "verify_checksum"
+	updateStageReplace         = "replace"
+	updateStageSkillSync       = "skill_sync"
+)
+
 // integrityError marks a non-retryable supply-chain failure (missing/invalid
 // signature, or checksum mismatch). Callers map it to E_INTEGRITY, never to a
 // retryable network code.
@@ -45,6 +56,60 @@ func newIntegrityError(err error) error { return &integrityError{err: err} }
 func isIntegrityError(err error) bool {
 	var ie *integrityError
 	return errors.As(err, &ie)
+}
+
+// replaceError marks a local failure during the atomic replace stage (temp dir,
+// extract, file write/rename, permission, disk full). These were previously
+// misclassified as E_NETWORK; the caller maps permission failures to E_FORBIDDEN
+// (exit 4) and all other io/disk failures to E_IO (exit 1). The binary was NOT
+// swapped (the atomic rename did not commit), so binary_replaced stays false.
+type replaceError struct {
+	err        error
+	permission bool
+}
+
+func (e *replaceError) Error() string { return e.err.Error() }
+func (e *replaceError) Unwrap() error { return e.err }
+
+func newReplaceError(err error) error {
+	return &replaceError{err: err, permission: errors.Is(err, os.ErrPermission)}
+}
+
+// asReplaceError reports whether err is a replace-stage local failure.
+func asReplaceError(err error) (*replaceError, bool) {
+	var re *replaceError
+	if errors.As(err, &re) {
+		return re, true
+	}
+	return nil, false
+}
+
+// updateStageOf reports the stage an update error failed at, defaulting to
+// discover for an error that carries no stage marker.
+func updateStageOf(err error) string {
+	var se *stagedError
+	if errors.As(err, &se) {
+		return se.stage
+	}
+	return updateStageDiscover
+}
+
+// stagedError annotates an update error with the stage it occurred at without
+// disturbing the underlying integrity/replace classification (Unwrap chains
+// through, so isIntegrityError/asReplaceError still see the cause).
+type stagedError struct {
+	stage string
+	err   error
+}
+
+func (e *stagedError) Error() string { return e.err.Error() }
+func (e *stagedError) Unwrap() error { return e.err }
+
+func withStage(stage string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return &stagedError{stage: stage, err: err}
 }
 
 // Testable seams (mirrors the pattern used by sibling tools).
@@ -80,61 +145,64 @@ type updateApplyResult struct {
 func performBinaryUpdate(ctx context.Context, targetVersion string) (status, signatureStatus, installedPath string, err error) {
 	exe, err := updateBinaryExecutable()
 	if err != nil {
-		return "", "", "", fmt.Errorf("resolving current executable: %w", err)
+		return "", "", "", withStage(updateStageReplace, newReplaceError(fmt.Errorf("resolving current executable: %w", err)))
 	}
 
 	rel, err := fetchBinaryRelease(ctx, targetVersion)
 	if err != nil {
-		return "", "", "", err
+		return "", "", "", withStage(updateStageDiscover, err)
 	}
 	target := normalizeVersion(rel.TagName)
 	if target == "" {
-		return "", "", "", errors.New("release is missing tag_name")
+		return "", "", "", withStage(updateStageDiscover, errors.New("release is missing tag_name"))
 	}
 	assetName, err := updateArchiveName(target)
 	if err != nil {
-		return "", "", "", err
+		return "", "", "", withStage(updateStageDiscover, err)
 	}
 	assetURL := findUpdateAssetURL(rel.Assets, assetName)
 	if assetURL == "" {
-		return "", "", "", fmt.Errorf("release %s does not include asset %s", rel.TagName, assetName)
+		return "", "", "", withStage(updateStageDiscover, fmt.Errorf("release %s does not include asset %s", rel.TagName, assetName))
 	}
 	checksumURL := findUpdateAssetURL(rel.Assets, "checksums.txt")
 	if checksumURL == "" {
-		return "", "", "", fmt.Errorf("release %s does not include checksums.txt", rel.TagName)
+		return "", "", "", withStage(updateStageDiscover, fmt.Errorf("release %s does not include checksums.txt", rel.TagName))
 	}
 	bundleURL := findUpdateAssetURL(rel.Assets, "checksums.txt.sigstore.json")
 
 	tmpDir, err := os.MkdirTemp("", "cnstock-cli-update-*")
 	if err != nil {
-		return "", "", "", fmt.Errorf("creating temp dir: %w", err)
+		return "", "", "", withStage(updateStageReplace, newReplaceError(fmt.Errorf("creating temp dir: %w", err)))
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	archivePath := filepath.Join(tmpDir, assetName)
 	if err := downloadUpdateFile(ctx, assetURL, archivePath); err != nil {
-		return "", "", "", fmt.Errorf("downloading archive: %w", err)
+		return "", "", "", withStage(updateStageDownload, fmt.Errorf("downloading archive: %w", err))
 	}
 	checksumPath := filepath.Join(tmpDir, "checksums.txt")
 	if err := downloadUpdateFile(ctx, checksumURL, checksumPath); err != nil {
-		return "", "", "", fmt.Errorf("downloading checksums: %w", err)
+		return "", "", "", withStage(updateStageDownload, fmt.Errorf("downloading checksums: %w", err))
 	}
 
 	signatureStatus, err = verifyUpdateChecksumSignature(ctx, checksumPath, bundleURL, tmpDir)
 	if err != nil {
-		return "", "", "", newIntegrityError(fmt.Errorf("verifying release signature: %w", err))
+		return "", "", "", withStage(updateStageVerifySignature, newIntegrityError(fmt.Errorf("verifying release signature: %w", err)))
 	}
 	if err := verifyUpdateChecksum(archivePath, checksumPath, assetName); err != nil {
-		return "", "", "", newIntegrityError(fmt.Errorf("verifying archive: %w", err))
+		return "", "", "", withStage(updateStageVerifyChecksum, newIntegrityError(fmt.Errorf("verifying archive: %w", err)))
 	}
 
+	// From here on, failures are local replace-stage problems (extract, write,
+	// rename, permission, disk). The atomic rename has not committed, so the
+	// installed binary is untouched.
 	binPath, err := extractUpdateArchive(archivePath, assetName, tmpDir)
 	if err != nil {
-		return "", "", "", fmt.Errorf("extracting archive: %w", err)
+		return "", "", "", withStage(updateStageReplace, newReplaceError(fmt.Errorf("extracting archive: %w", err)))
 	}
 	applied, err := updateBinaryApply(binPath, exe)
 	if err != nil {
-		return "", "", "", fmt.Errorf("installing update: %w", err)
+		return "", "", "", withStage(updateStageReplace, newReplaceError(fmt.Errorf("installing update: %w", err)))
 	}
 	return applied.Status, signatureStatus, applied.Path, nil
 }

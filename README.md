@@ -72,7 +72,7 @@ The README is intentionally a map, not the full manual. Agents should call `cnst
 3. Run `cnstock-cli context --compact` and `cnstock-cli doctor --compact`.
 4. Run `cnstock-cli reference --compact` and select commands from the live contract, not from `--help` scraping.
 5. Prefer `--compact` and `--fields` on JSON outputs to reduce token use.
-6. Treat market-data commands as read-only. `update` is the local lifecycle write command and must use `--dry-run` then `--confirm <confirm_token>`.
+6. Treat market-data commands as read-only. `update` is the local lifecycle write command: a bare `cnstock-cli update` runs the whole self-update in one call (no confirm token); `--check` and `--dry-run` are optional read-only flags.
 7. After a successful update, review `signature_status` and checksum verification, ensure `skill_sync_status` is successful, then run `cnstock-cli changelog --since <previous-version> --compact` and `cnstock-cli reference --compact` before continuing.
 
 ## Machine Contract

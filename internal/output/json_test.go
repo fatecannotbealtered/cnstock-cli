@@ -151,3 +151,23 @@ func TestHintForCode(t *testing.T) {
 		}
 	}
 }
+
+// The new update error codes (CLI-SPEC §14) must classify retryability correctly:
+// E_INTEGRITY and E_IO are non-retryable (need a fix), E_INTERRUPTED is retryable
+// (staged work leaves nothing half-applied).
+func TestIsRetryable_UpdateCodes(t *testing.T) {
+	tests := []struct {
+		code ErrorCode
+		want bool
+	}{
+		{ErrIntegrity, false},
+		{ErrIO, false},
+		{ErrInterrupted, true},
+		{ErrNetwork, true},
+	}
+	for _, tt := range tests {
+		if got := isRetryable(tt.code); got != tt.want {
+			t.Errorf("isRetryable(%q) = %v, want %v", tt.code, got, tt.want)
+		}
+	}
+}

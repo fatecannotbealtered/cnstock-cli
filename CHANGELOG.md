@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.7] - 2026-06-21
+
+### Changed
+
+- `update` is now a **single command with no confirm token**. A bare `cnstock-cli update` performs the whole self-update in one call — resolve the latest (or `--target-version`) release, verify integrity in-process (Sigstore signature then SHA256 checksum), replace the binary, then sync the whole Agent Skill directory. The previous `--dry-run` → `--confirm <token>` write gate is removed from `update` (self-update is exempt from the §7 write gate; its safety guarantee is in-process signature verification, not an agent's review of a preview). `update` is idempotent: already-latest returns `ok` with a no-op. `--check` and `--dry-run` remain optional read-only flags, and `--dry-run` no longer issues a `confirm_token` or `expires_at`. The `--confirm` global flag and the update confirm-token machinery are removed.
+
+### Added
+
+- Staged failure and interruption envelope for `update` (CLI-SPEC §14): every update failure and interrupt now carries `stage` (`discover`/`download`/`verify_signature`/`verify_checksum`/`replace`/`skill_sync`), `current_version`, `binary_replaced`, and `skill_sync_status` so an agent can reason about the post-state. A SIGINT/SIGTERM during `update` is trapped, the temp dir is cleaned, and a terminal JSON envelope (`E_INTERRUPTED`, exit 130) is still emitted instead of dying as a bare killed process.
+- New error codes `E_IO` (→ exit 1) and `E_INTERRUPTED` (→ exit 130).
+
+### Fixed
+
+- `update` replace-stage local failures (temp dir, extract, file write/rename, permission, disk) are no longer misclassified as a retryable `E_NETWORK`: permission failures map to `E_FORBIDDEN` (exit 4) and other io/disk failures to `E_IO` (exit 1), both non-retryable with `binary_replaced: false`.
+- A Skill-sync failure after a successful binary replace is now reported as **partial success** (`ok: false`, `binary_replaced: true`, retryable) with a `skill_sync_command`, instead of a hard `E_NETWORK` that hid the fact the binary already updated.
+
 ## [1.1.6] - 2026-06-16
 
 ### Fixed

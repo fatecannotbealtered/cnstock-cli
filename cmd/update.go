@@ -2,16 +2,16 @@ package cmd
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/fatecannotbealtered/cnstock-cli/internal/api"
@@ -39,7 +39,7 @@ var (
 var updateCmd = &cobra.Command{
 	Use:   "update",
 	Short: "Update cnstock-cli and sync the bundled Skill",
-	Long:  "Check GitHub Releases, dry-run the planned local lifecycle update, then update the package/binary and sync the whole Agent Skill directory after confirmation.",
+	Long:  "Resolve the latest (or --target-version) release, verify its integrity in-process (Sigstore signature then SHA256), replace the binary, and sync the whole Agent Skill directory — all in one call. Self-update takes no confirm token; --check and --dry-run are optional read-only flags.",
 	Args:  cobra.NoArgs,
 	RunE:  runUpdate,
 }
@@ -68,27 +68,30 @@ type updateReport struct {
 	Commands          []string       `json:"commands"`
 	PostUpdateAction  string         `json:"post_update_action"`
 	SignatureStatus   string         `json:"signature_status"`
+	SignatureVerified bool           `json:"signature_verified"`
 	SkillSyncCommand  string         `json:"skill_sync_command"`
 	SkillSyncStatus   string         `json:"skill_sync_status"`
-	ConfirmToken      string         `json:"confirm_token,omitempty"`
-	ExpiresAt         string         `json:"expires_at,omitempty"`
+	PreviousVersion   string         `json:"previous_version,omitempty"`
+	BinaryReplaced    bool           `json:"binary_replaced"`
 	Preview           map[string]any `json:"preview,omitempty"`
 	Notes             []string       `json:"notes,omitempty"`
 	Notices           []updateNotice `json:"notices,omitempty"`
 }
 
-type updateConfirmPayload struct {
-	Method           string `json:"method"`
-	TargetVersion    string `json:"target_version"`
-	Command          string `json:"command"`
-	SkillSyncCommand string `json:"skill_sync_command"`
-	ExpiresAt        string `json:"expires_at"`
-}
-
 func runUpdate(cmd *cobra.Command, _ []string) error {
+	// Trap SIGINT/SIGTERM so an interrupt at any stage still unwinds cleanly and
+	// emits a terminal JSON envelope instead of dying as a bare killed process.
+	// The cancelled context aborts in-flight HTTP/IO; performBinaryUpdate cleans
+	// its temp dir on return, so nothing is left half-applied before the swap.
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	client := &http.Client{Timeout: 10 * time.Second}
-	rel, raw, err := fetchLatestRelease(cmd.Context(), client, latestReleaseEndpoint())
+	rel, raw, err := fetchLatestRelease(ctx, client, latestReleaseEndpoint())
 	if err != nil {
+		if ctx.Err() != nil {
+			return updateInterrupted(updateStageDiscover, version, false, "not_run")
+		}
 		return handleError(err)
 	}
 	if outputFormat == "raw" {
@@ -143,6 +146,8 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 		emitUpdateReport(report)
 		return nil
 	}
+	// Idempotent: already on the latest (or no newer target requested) is a no-op
+	// success, so an agent may call update freely.
 	if report.UpdateAvailable != nil && !*report.UpdateAvailable && strings.TrimSpace(updateTargetVersion) == "" {
 		emitUpdateReport(report)
 		return nil
@@ -150,52 +155,125 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 	if dryRunMode {
 		return emitUpdateDryRun(cmd, report, command)
 	}
-	if strings.TrimSpace(confirmToken) == "" {
-		return updateFail("update requires --dry-run followed by --confirm <confirm_token>", output.ErrConfirm, ExitConfirmRequired)
-	}
-	payload, err := validateUpdateConfirmToken(confirmToken, "github-binary", target, command, skillCommand)
-	if err != nil {
-		return updateFail(err.Error(), output.ErrConflict, ExitConflict)
-	}
-	// Single-use enforcement: a confirm token may drive exactly one update. A
-	// replay (e.g. an agent retrying an update that timed out) is rejected so the
-	// update cannot be duplicated; mark BEFORE performing it so a crash mid-update
-	// still consumes the token.
-	now := updateNow()
-	if isConfirmTokenConsumed(confirmToken, now) {
-		return updateFail("confirm token already used; the operation may have completed — re-run --dry-run to see current state", output.ErrConflict, ExitConflict)
-	}
-	expiresUnix := now.Add(15 * time.Minute).Unix()
-	if expires, perr := time.Parse(time.RFC3339, payload.ExpiresAt); perr == nil {
-		expiresUnix = expires.Unix()
-	}
-	markConfirmTokenConsumed(confirmToken, expiresUnix, now)
 
-	// Download + verify (in-process Sigstore) + checksum + replace binary. No
-	// dependency on npm/go/pip; an unsigned or unverifiable release is refused.
-	status, sigStatus, _, err := performBinaryUpdate(cmd.Context(), target)
+	// Single-command update: no confirm token. Self-update is a single-target,
+	// non-destructive, self-verifying operation; its safety guarantee is the
+	// in-process Sigstore verification below, not an agent's review of a preview.
+	// Download + verify (signature then checksum) + replace binary, no dependency
+	// on npm/go/pip; an unsigned or unverifiable release is refused.
+	status, sigStatus, _, err := performBinaryUpdate(ctx, target)
 	if err != nil {
+		stage := updateStageOf(err)
+		if ctx.Err() != nil {
+			// Interrupted before the swap committed: still on the old version.
+			return updateInterrupted(stage, version, false, "not_run")
+		}
 		if isIntegrityError(err) {
 			// Non-retryable: a missing/invalid signature or checksum mismatch is a
 			// supply-chain red flag, not a transient blip.
-			return updateFail(err.Error(), output.ErrIntegrity, ExitGeneric)
+			return updateFailStaged(err.Error(), output.ErrIntegrity, ExitGeneric, stage, version, false, "not_run")
 		}
-		return updateFail("update failed: "+err.Error(), output.ErrNetwork, ExitNetwork)
-	}
-	if err := updateSkillSync(cmd.Context(), updateSkillRepo); err != nil {
-		return updateFail("syncing skill directory: "+err.Error(), output.ErrNetwork, ExitNetwork)
+		if re, ok := asReplaceError(err); ok {
+			// Local replace-stage failure: the atomic rename did not commit, so the
+			// installed binary is untouched. Permission -> E_FORBIDDEN; io/disk -> E_IO.
+			if re.permission {
+				return updateFailStaged("update failed: "+err.Error()+"; fix file permissions, then re-run `cnstock-cli update`", output.ErrForbidden, ExitForbidden, stage, version, false, "not_run")
+			}
+			return updateFailStaged("update failed: "+err.Error()+"; check disk space and file locks, then re-run `cnstock-cli update`", output.ErrIO, ExitIO, stage, version, false, "not_run")
+		}
+		// discover/download network failure: transient, idempotent re-run is safe.
+		code, exitCode, _ := classifyError(err)
+		if code == output.ErrUnknown {
+			code, exitCode = output.ErrNetwork, ExitNetwork
+		}
+		return updateFailStaged("update failed: "+err.Error()+"; transient — re-run `cnstock-cli update`, it is idempotent", code, exitCode, stage, version, false, "not_run")
 	}
 
 	report.SignatureStatus = sigStatus
+	report.SignatureVerified = sigStatus == "verified"
+	report.BinaryReplaced = true
+	report.PreviousVersion = version
 	report.Status = "updated"
 	if status == "scheduled" {
 		report.Status = "scheduled"
 		report.Notes = append(report.Notes, "binary replacement scheduled; restart the command after this process exits")
 	}
+
+	// Skill sync runs AFTER the swap. A failure here is PARTIAL SUCCESS: the
+	// binary is already on the new version, the agent just needs to run the skill
+	// sync command — not a hard failure that hides the binary update.
+	if err := updateSkillSync(ctx, updateSkillRepo); err != nil {
+		report.SkillSyncStatus = "failed"
+		if ctx.Err() != nil {
+			return updateInterrupted(updateStageSkillSync, target, true, "failed")
+		}
+		return emitUpdatePartialSuccess(report, err)
+	}
+
 	report.SkillSyncStatus = "synced"
 	report.PostUpdateAction = "Run `cnstock-cli changelog --since " + version + " --compact` and `cnstock-cli reference --compact` before continuing."
 	emitUpdateReport(report)
 	return nil
+}
+
+// updateFailDetails is the failure envelope detail block every update failure
+// carries so an agent can reason about the post-state (CLI-SPEC §14).
+func updateFailDetails(stage, currentVersion string, binaryReplaced bool, skillSyncStatus string) map[string]any {
+	return map[string]any{
+		"stage":             stage,
+		"current_version":   currentVersion,
+		"binary_replaced":   binaryReplaced,
+		"skill_sync_status": skillSyncStatus,
+	}
+}
+
+// updateFailStaged emits a staged update failure envelope (stage + post-state)
+// and sets the exit code.
+func updateFailStaged(msg string, code output.ErrorCode, exitCode int, stage, currentVersion string, binaryReplaced bool, skillSyncStatus string) error {
+	if outputFormat == "text" {
+		output.Error(msg)
+	} else {
+		retryable := code == output.ErrNetwork || code == output.ErrTimeout || code == output.ErrRateLimit || code == output.ErrServer
+		output.PrintErrorEnvelopeWithDuration(msg, code, retryable, updateFailDetails(stage, currentVersion, binaryReplaced, skillSyncStatus), compactMode, commandDuration())
+	}
+	setExitCode(exitCode)
+	return ErrSilent
+}
+
+// updateInterrupted emits the terminal E_INTERRUPTED envelope (exit 130) after a
+// SIGINT/SIGTERM, stating the true post-state per the stage invariant.
+func updateInterrupted(stage, currentVersion string, binaryReplaced bool, skillSyncStatus string) error {
+	msg := "update cancelled; no change, still on " + currentVersion
+	if binaryReplaced {
+		msg = "update cancelled after the binary was replaced (now on " + currentVersion + "); run `" + updateSkillSyncCommand() + "`, then `cnstock-cli changelog --since " + version + "`"
+	}
+	if outputFormat == "text" {
+		output.Error(msg)
+	} else {
+		output.PrintErrorEnvelopeWithDuration(msg, output.ErrInterrupted, true, updateFailDetails(stage, currentVersion, binaryReplaced, skillSyncStatus), compactMode, commandDuration())
+	}
+	setExitCode(ExitInterrupted)
+	return ErrSilent
+}
+
+// emitUpdatePartialSuccess reports a binary-replaced-but-Skill-unsynced state.
+// Per CLI-SPEC §14 this is NOT a success: ok:false, binary_replaced:true, with a
+// retryable skill_sync_command the agent must run before using new behavior.
+func emitUpdatePartialSuccess(report updateReport, syncErr error) error {
+	msg := fmt.Sprintf("binary updated to %s but skill sync failed: %s. Run `%s`, then `cnstock-cli changelog --since %s`.",
+		report.TargetVersion, syncErr.Error(), report.SkillSyncCommand, report.PreviousVersion)
+	if outputFormat == "text" {
+		output.Error(msg)
+		setExitCode(ExitNetwork)
+		return ErrSilent
+	}
+	details := updateFailDetails(updateStageSkillSync, report.TargetVersion, true, "failed")
+	details["skill_sync_command"] = report.SkillSyncCommand
+	details["previous_version"] = report.PreviousVersion
+	details["signature_status"] = report.SignatureStatus
+	output.PrintErrorEnvelopeWithDuration(msg, output.ErrNetwork, true, details, compactMode, commandDuration())
+	setExitCode(ExitNetwork)
+	return ErrSilent
 }
 
 // binaryUpdateDescriptor is the stable action string bound into the confirm
@@ -209,18 +287,11 @@ func binaryUpdateDescriptor(target string) string {
 	return "download + verify (sigstore) + replace cnstock-cli binary from GitHub release " + canonicalVersionTag(t)
 }
 
+// emitUpdateDryRun is an OPTIONAL read-only preview of the update plan. It issues
+// NO confirm_token and NO expires_at — self-update is not a §7 write gate, so the
+// dry-run is never a required step before a bare `update`.
 func emitUpdateDryRun(cmd *cobra.Command, report updateReport, command string) error {
-	expires := updateNow().UTC().Add(15 * time.Minute).Truncate(time.Second)
-	payload := updateConfirmPayload{
-		Method:           report.InstallMethod,
-		TargetVersion:    report.TargetVersion,
-		Command:          command,
-		SkillSyncCommand: report.SkillSyncCommand,
-		ExpiresAt:        expires.Format(time.RFC3339),
-	}
 	report.Status = "dry_run"
-	report.ConfirmToken = issueUpdateConfirmToken(payload)
-	report.ExpiresAt = payload.ExpiresAt
 	report.Preview = map[string]any{
 		"action": "update cnstock-cli",
 		"changes": []map[string]any{
@@ -291,44 +362,6 @@ func runUpdateSkillSync(ctx context.Context, repo string) error {
 		return err
 	}
 	return nil
-}
-
-func issueUpdateConfirmToken(payload updateConfirmPayload) string {
-	data, _ := json.Marshal(payload)
-	sum := confirmDigest32(data)
-	return "ct_" + base64.RawURLEncoding.EncodeToString(data) + "." + hex.EncodeToString(sum[:])
-}
-
-func validateUpdateConfirmToken(token, method, target, command, skillCommand string) (updateConfirmPayload, error) {
-	var empty updateConfirmPayload
-	token = strings.TrimSpace(token)
-	if !strings.HasPrefix(token, "ct_") {
-		return empty, fmt.Errorf("confirmation token is invalid; re-run with --dry-run")
-	}
-	parts := strings.SplitN(strings.TrimPrefix(token, "ct_"), ".", 2)
-	if len(parts) != 2 {
-		return empty, fmt.Errorf("confirmation token is invalid; re-run with --dry-run")
-	}
-	data, err := base64.RawURLEncoding.DecodeString(parts[0])
-	if err != nil {
-		return empty, fmt.Errorf("confirmation token is invalid; re-run with --dry-run")
-	}
-	sum := confirmDigest32(data)
-	if !strings.EqualFold(parts[1], hex.EncodeToString(sum[:])) {
-		return empty, fmt.Errorf("confirmation token is invalid; re-run with --dry-run")
-	}
-	var payload updateConfirmPayload
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return empty, fmt.Errorf("confirmation token is invalid; re-run with --dry-run")
-	}
-	expires, err := time.Parse(time.RFC3339, payload.ExpiresAt)
-	if err != nil || !updateNow().UTC().Before(expires) {
-		return empty, fmt.Errorf("confirmation token expired; re-run with --dry-run")
-	}
-	if payload.Method != method || payload.TargetVersion != target || payload.Command != command || payload.SkillSyncCommand != skillCommand {
-		return empty, fmt.Errorf("confirmation token does not match this update; re-run with --dry-run")
-	}
-	return payload, nil
 }
 
 func compareVersions(current, latest string) (int, bool) {
@@ -430,16 +463,6 @@ func printUpdateReport(report updateReport) {
 	for _, note := range report.Notes {
 		output.Gray("  " + note)
 	}
-}
-
-func updateFail(msg string, code output.ErrorCode, exitCode int) error {
-	if outputFormat == "text" {
-		output.Error(msg)
-	} else {
-		output.PrintErrorEnvelopeWithDuration(msg, code, false, nil, compactMode, commandDuration())
-	}
-	setExitCode(exitCode)
-	return ErrSilent
 }
 
 func truncateUpdateMessage(s string, n int) string {

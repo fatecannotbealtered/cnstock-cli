@@ -137,20 +137,22 @@ func filterObject(obj json.RawMessage, fields []string) []byte {
 type ErrorCode string
 
 const (
-	ErrConfig     ErrorCode = "E_CONFIG"
-	ErrAuth       ErrorCode = "E_AUTH"
-	ErrForbidden  ErrorCode = "E_FORBIDDEN"
-	ErrNotFound   ErrorCode = "E_NOT_FOUND"
-	ErrRateLimit  ErrorCode = "E_RATE_LIMITED"
-	ErrServer     ErrorCode = "E_SERVER"
-	ErrValidation ErrorCode = "E_VALIDATION"
-	ErrNetwork    ErrorCode = "E_NETWORK"
-	ErrTimeout    ErrorCode = "E_TIMEOUT"
-	ErrConfirm    ErrorCode = "E_CONFIRMATION_REQUIRED"
-	ErrConflict   ErrorCode = "E_CONFLICT"
-	ErrHuman      ErrorCode = "E_HUMAN_REQUIRED"
-	ErrIntegrity  ErrorCode = "E_INTEGRITY"
-	ErrUnknown    ErrorCode = "E_UNKNOWN"
+	ErrConfig      ErrorCode = "E_CONFIG"
+	ErrAuth        ErrorCode = "E_AUTH"
+	ErrForbidden   ErrorCode = "E_FORBIDDEN"
+	ErrNotFound    ErrorCode = "E_NOT_FOUND"
+	ErrRateLimit   ErrorCode = "E_RATE_LIMITED"
+	ErrServer      ErrorCode = "E_SERVER"
+	ErrValidation  ErrorCode = "E_VALIDATION"
+	ErrNetwork     ErrorCode = "E_NETWORK"
+	ErrTimeout     ErrorCode = "E_TIMEOUT"
+	ErrConfirm     ErrorCode = "E_CONFIRMATION_REQUIRED"
+	ErrConflict    ErrorCode = "E_CONFLICT"
+	ErrHuman       ErrorCode = "E_HUMAN_REQUIRED"
+	ErrIntegrity   ErrorCode = "E_INTEGRITY"
+	ErrIO          ErrorCode = "E_IO"
+	ErrInterrupted ErrorCode = "E_INTERRUPTED"
+	ErrUnknown     ErrorCode = "E_UNKNOWN"
 )
 
 // PrintErrorJSON outputs an error envelope to stdout (the failure envelope is
@@ -213,7 +215,7 @@ func writeJSON(w io.Writer, v any, compact bool) {
 
 func isRetryable(code ErrorCode) bool {
 	switch code {
-	case ErrNetwork, ErrServer, ErrRateLimit, ErrTimeout:
+	case ErrNetwork, ErrServer, ErrRateLimit, ErrTimeout, ErrInterrupted:
 		return true
 	default:
 		return false
@@ -238,6 +240,10 @@ func hintForCode(code ErrorCode) string {
 		return "Complete the requested human action, then resume"
 	case ErrIntegrity:
 		return "Release integrity verification failed (signature or checksum); do not retry. Re-run update to fetch the current release, or report a possible supply-chain issue"
+	case ErrIO:
+		return "Local filesystem failure (disk, permission, or locked file); fix the environment, then re-run update"
+	case ErrInterrupted:
+		return "Operation cancelled by signal; nothing was left half-applied. Re-run update, it is idempotent"
 	default:
 		return ""
 	}

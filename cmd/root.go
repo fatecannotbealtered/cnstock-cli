@@ -65,6 +65,13 @@ const (
 	ExitNetwork         = 7
 	ExitRateLimit       = 7
 	ExitTimeout         = 8
+	// ExitIO maps E_IO: a local filesystem failure during the update replace
+	// stage (disk full, locked file, partial write). Generic exit 1, non-retryable
+	// without an environment fix.
+	ExitIO = 1
+	// ExitInterrupted maps E_INTERRUPTED: the operation was cancelled by a signal
+	// (SIGINT = 128+2). Staged work leaves nothing half-applied, so it is retryable.
+	ExitInterrupted = 130
 )
 
 // ErrSilent indicates the error has been printed; cobra should not print again.
@@ -90,10 +97,8 @@ var (
 	fieldsList []string
 	// quietMode suppresses non-result stdout output.
 	quietMode bool
-	// dryRunMode previews local lifecycle writes; market-data commands reject it.
+	// dryRunMode previews the update plan (read-only); market-data commands reject it.
 	dryRunMode bool
-	// confirmToken executes a prior lifecycle dry-run; market-data commands reject it.
-	confirmToken string
 	// commandStartedAt is used for JSON envelope meta.duration_ms.
 	commandStartedAt time.Time
 )
@@ -144,8 +149,7 @@ func init() {
 	rootCmd.PersistentFlags().StringSliceVar(&fieldsList, "fields", nil, "Restrict JSON data to these top-level fields (ordered, comma-separated)")
 	rootCmd.PersistentFlags().BoolVar(&jsonMode, "json", false, "Compatibility alias for --format json")
 	rootCmd.PersistentFlags().BoolVar(&quietMode, "quiet", false, "Suppress non-result stdout output")
-	rootCmd.PersistentFlags().BoolVar(&dryRunMode, "dry-run", false, "Preview local lifecycle writes such as update without applying them")
-	rootCmd.PersistentFlags().StringVar(&confirmToken, "confirm", "", "Execute a prior dry-run confirmation token for local lifecycle writes")
+	rootCmd.PersistentFlags().BoolVar(&dryRunMode, "dry-run", false, "Read-only preview of the update plan (update only)")
 	installUpdateNoticeHelp(rootCmd)
 
 	// Resolve and validate output flags before any command runs.
@@ -159,8 +163,8 @@ func init() {
 			return handleError(api.NewValidationError("format only supports json, text, raw"))
 		}
 		output.Quiet = quietMode
-		if cmd.CommandPath() != "cnstock-cli update" && (flagChanged(cmd, "dry-run") || flagChanged(cmd, "confirm")) {
-			return handleError(api.NewValidationError("market-data commands are read-only; --dry-run and --confirm are only supported by update"))
+		if cmd.CommandPath() != "cnstock-cli update" && flagChanged(cmd, "dry-run") {
+			return handleError(api.NewValidationError("market-data commands are read-only; --dry-run is only supported by update"))
 		}
 		return nil
 	}

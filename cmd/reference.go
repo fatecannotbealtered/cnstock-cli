@@ -140,15 +140,14 @@ func buildReference() referenceData {
 		},
 		Permissions: []referencePermission{
 			{Tier: "read-only", Description: "Market-data and self-description commands only read public web endpoints or local metadata; no credentials and no external writes.", Writable: false, Default: true},
-			{Tier: "local-write", Description: "Local lifecycle update only: package/binary update and Agent Skill directory sync after dry-run/confirm.", Writable: true, Default: false},
+			{Tier: "local-write", Description: "Local lifecycle update only: single-command self-update (verify-then-replace binary) plus Agent Skill directory sync; no confirm token.", Writable: true, Default: false},
 		},
 		GlobalFlags: []referenceFlag{
 			{Name: "--format", Type: "enum", Default: "json", Description: "Output format: json|text|raw."},
 			{Name: "--json", Type: "bool", Description: "Compatibility alias for --format json."},
 			{Name: "--fields", Type: "csv", Description: "For JSON output, keep only the listed top-level fields inside data."},
 			{Name: "--compact", Type: "bool", Description: "Emit compact single-line JSON."},
-			{Name: "--dry-run", Type: "bool", Description: "Preview local lifecycle writes such as update; market-data commands reject it."},
-			{Name: "--confirm", Type: "string", Description: "Execute a prior dry-run confirmation token for local lifecycle writes such as update."},
+			{Name: "--dry-run", Type: "bool", Description: "Read-only preview of the update plan (update only); issues no confirm token; market-data commands reject it."},
 			{Name: "--quiet", Type: "bool", Description: "Suppress non-result human output."},
 			{Name: "--version", Type: "bool", Description: "Print version."},
 			{Name: "--help", Type: "bool", Description: "Print help."},
@@ -190,8 +189,8 @@ func buildReference() referenceData {
 			{Path: "changelog", Type: "self-description", Description: "Version changes derived from CHANGELOG.md.", PermissionTier: "read-only", RawSupported: true, Pagination: "none", OutputSchema: "changelog", Examples: []string{"cnstock-cli changelog --since 1.1.0 --compact"}, Params: []referenceParam{
 				{Name: "--since", Type: "semver", Description: "Only include entries newer than this version."},
 			}},
-			{Path: "update", Type: "write", Description: "Check, dry-run, and confirm a local package/binary update, then sync the whole Agent Skill directory.", PermissionTier: "local-write", RawSupported: true, Pagination: "none", OutputSchema: "update_report", Examples: []string{"cnstock-cli update --check --compact", "cnstock-cli update --dry-run --compact", "cnstock-cli update --confirm <confirm_token> --compact"}, Params: []referenceParam{
-				{Name: "--check", Type: "bool", Description: "Check for an available update without changing files."},
+			{Path: "update", Type: "write", Description: "Single-command self-update: resolve the latest (or --target-version) release, verify integrity in-process (signature then checksum), replace the binary, and sync the whole Agent Skill directory. Idempotent and confirm-token-free; --check and --dry-run are optional read-only.", PermissionTier: "local-write", RawSupported: true, Pagination: "none", OutputSchema: "update_report", Examples: []string{"cnstock-cli update --compact", "cnstock-cli update --check --compact", "cnstock-cli update --dry-run --compact"}, Params: []referenceParam{
+				{Name: "--check", Type: "bool", Description: "Read-only probe for an available update; changes nothing."},
 				{Name: "--method", Type: "enum", Default: "auto", Description: "Preferred update method hint: auto|npm|go|github."},
 				{Name: "--target-version", Type: "semver", Description: "Install a specific version instead of the latest release."},
 			}},
@@ -218,6 +217,7 @@ func buildReference() referenceData {
 			{Code: ExitTransient, Meaning: "Retryable transient error", AgentAction: "Back off and retry."},
 			{Code: ExitTimeout, Meaning: "Timeout", AgentAction: "Back off and retry."},
 			{Code: 9, Meaning: "Human action required", AgentAction: "Relay action to the user, wait, then resume."},
+			{Code: ExitInterrupted, Meaning: "Interrupted by signal (SIGINT/SIGTERM)", AgentAction: "Nothing left half-applied; re-run update, it is idempotent."},
 		},
 		ErrorCodes: []referenceErrorCode{
 			{Code: output.ErrValidation, ExitCode: ExitBadArgs, Retryable: false, Meaning: "Invalid arguments or usage."},
@@ -231,6 +231,9 @@ func buildReference() referenceData {
 			{Code: output.ErrNetwork, ExitCode: ExitTransient, Retryable: true, Meaning: "Network or HTTP transport failure."},
 			{Code: output.ErrRateLimit, ExitCode: ExitTransient, Retryable: true, Meaning: "Rate limited by upstream."},
 			{Code: output.ErrTimeout, ExitCode: ExitTimeout, Retryable: true, Meaning: "Request timeout."},
+			{Code: output.ErrIntegrity, ExitCode: ExitGeneric, Retryable: false, Meaning: "Release integrity failure (signature or checksum); do not retry."},
+			{Code: output.ErrIO, ExitCode: ExitIO, Retryable: false, Meaning: "Local filesystem failure during update replace (disk, lock, partial write); fix the environment, then re-run."},
+			{Code: output.ErrInterrupted, ExitCode: ExitInterrupted, Retryable: true, Meaning: "Operation cancelled by signal; nothing left half-applied; re-run update."},
 			{Code: output.ErrHuman, ExitCode: 9, Retryable: false, Meaning: "A human must complete an external step before continuing."},
 			{Code: output.ErrUnknown, ExitCode: ExitGeneric, Retryable: false, Meaning: "Unexpected error."},
 		},
@@ -244,7 +247,7 @@ func buildReference() referenceData {
 			"sector[]":         {Shape: "array", Fields: []string{"code", "name", "change_pct", "change", "price", "turnover", "volume", "turnover_rate", "advance_decline", "leading_stock", "_untrusted"}, UntrustedFields: []string{"name", "advance_decline", "leading_stock.name"}},
 			"market_stats":     {Shape: "object", Fields: []string{"advancing", "declining", "flat", "limit_up", "limit_down", "amount", "markets", "warnings"}, UntrustedFields: []string{"markets[].name"}},
 			"financials":       {Shape: "object", Fields: []string{"symbol", "market", "name", "code", "price", "market_cap", "float_market_cap", "pe_ratio", "pb", "turnover_rate", "amount", "warnings", "_untrusted"}, UntrustedFields: []string{"name"}},
-			"update_report":    {Shape: "object", Fields: []string{"current_version", "latest_version", "target_version", "status", "update_available", "install_method", "release_url", "recommended_action", "commands", "signature_status", "skill_sync_command", "skill_sync_status", "confirm_token", "expires_at", "preview", "post_update_action", "notes"}},
+			"update_report":    {Shape: "object", Fields: []string{"current_version", "latest_version", "target_version", "previous_version", "status", "update_available", "install_method", "release_url", "recommended_action", "commands", "signature_status", "signature_verified", "binary_replaced", "skill_sync_command", "skill_sync_status", "preview", "post_update_action", "notes"}},
 			"changelog":        {Shape: "object", Fields: []string{"current_version", "since", "entries"}},
 			"context":          {Shape: "object", Fields: []string{"version", "go_version", "os", "arch", "environment", "account", "risk_tier", "risk_summary", "permission_tier", "default_format", "formats", "commands", "config", "credentials", "endpoints"}},
 			"doctor":           {Shape: "object", Fields: []string{"ok", "checked_at", "risk_tier", "checks", "endpoints"}},
@@ -284,7 +287,7 @@ func referenceMarkdown() string {
 
 ## Permission Boundary
 
-cnstock-cli market-data commands are T0/read-only: no credentials, no external writes, and no permission escalation path. ` + "`update`" + ` is the only local lifecycle write command; it may update the local package/binary and sync the whole Agent Skill directory, and therefore requires ` + "`--dry-run`" + ` followed by ` + "`--confirm <confirm_token>`" + `.
+cnstock-cli market-data commands are T0/read-only: no credentials, no external writes, and no permission escalation path. ` + "`update`" + ` is the only local lifecycle write command; a bare ` + "`update`" + ` performs the whole self-update (verify-then-replace binary, then sync the whole Agent Skill directory) in one call. Self-update takes no confirm token — its safety guarantee is in-process Sigstore signature verification, not a preview gate. ` + "`--check`" + ` and ` + "`--dry-run`" + ` are optional read-only flags.
 
 ## Error Codes
 
@@ -301,6 +304,9 @@ cnstock-cli market-data commands are T0/read-only: no credentials, no external w
 | E_NETWORK | 7 | true | Network or HTTP transport failure |
 | E_RATE_LIMITED | 7 | true | Upstream rate limit |
 | E_TIMEOUT | 8 | true | Request timeout |
+| E_INTEGRITY | 1 | false | Release signature/checksum failure (update); do not retry |
+| E_IO | 1 | false | Local filesystem failure during update replace; fix and re-run |
+| E_INTERRUPTED | 130 | true | Cancelled by signal; nothing half-applied; re-run update |
 | E_HUMAN_REQUIRED | 9 | false | Human action required |
 | E_UNKNOWN | 1 | false | Unexpected error |
 `
