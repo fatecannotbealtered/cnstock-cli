@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	project "github.com/fatecannotbealtered/cnstock-cli"
 	"github.com/spf13/cobra"
 )
 
@@ -89,6 +90,24 @@ func refreshUpdateNotices(ctx context.Context, source string) []updateNotice {
 	return notices
 }
 
+// updateNoticeSeverity grades the update notice from the embedded CHANGELOG delta
+// between the running version (current) and the latest. It returns "warning" when
+// the delta contains a security entry OR the latest crosses a major version;
+// otherwise "info". "critical" is reserved and never emitted here (CLI-SPEC §14).
+func updateNoticeSeverity(current, latest string) string {
+	if cur, ok := parseVersion(current); ok {
+		if next, ok := parseVersion(latest); ok && next[0] > cur[0] {
+			return "warning"
+		}
+	}
+	for _, entry := range filterChangelogSince(parseChangelog(project.ChangelogMarkdown), current) {
+		if len(entry.Changes["security"]) > 0 {
+			return "warning"
+		}
+	}
+	return "info"
+}
+
 func updateNoticesFromReport(report updateReport, source string) []updateNotice {
 	if report.UpdateAvailable == nil || !*report.UpdateAvailable {
 		return nil
@@ -104,7 +123,7 @@ func updateNoticesFromReport(report updateReport, source string) []updateNotice 
 	}
 	notice := updateNotice{
 		Type:               "update_available",
-		Severity:           "info",
+		Severity:           updateNoticeSeverity(current, latest),
 		CurrentVersion:     current,
 		LatestVersion:      latest,
 		UpdateAvailable:    true,
@@ -122,6 +141,22 @@ func updateNoticesFromReport(report updateReport, source string) []updateNotice 
 	}
 	notice.Message = fmt.Sprintf("cnstock-cli %s is available (current %s)", latest, current)
 	return []updateNotice{notice}
+}
+
+// cachedUpdateNoticesAsAny adapts the cached update notices to the output
+// package's UpdateNoticesProvider hook (meta.notices). It reads ONLY the local
+// cache (no network) and returns nil when the cache holds nothing to report, so
+// meta.notices is omitted.
+func cachedUpdateNoticesAsAny() []any {
+	notices := readCachedUpdateNotices()
+	if len(notices) == 0 {
+		return nil
+	}
+	out := make([]any, 0, len(notices))
+	for _, n := range notices {
+		out = append(out, n)
+	}
+	return out
 }
 
 func readCachedUpdateNotices() []updateNotice {
@@ -196,7 +231,11 @@ func updateNoticeDisabled() bool {
 	return value == "1" || value == "true" || value == "yes" || legacy == "1" || legacy == "true" || legacy == "yes"
 }
 
-func updateNoticeAutoDisabled() bool {
+// updateNoticeAutoDisabled is a seam (overridable in tests) reporting whether the
+// update-notice cache is disabled. By default it is off under `go test` (binary
+// suffix `.test`) so the real test suite never touches the user's cache; a test
+// that exercises the cache path overrides it against a temp HOME.
+var updateNoticeAutoDisabled = func() bool {
 	return updateNoticeDisabled() || strings.HasSuffix(os.Args[0], ".test")
 }
 

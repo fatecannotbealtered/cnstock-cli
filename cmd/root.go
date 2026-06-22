@@ -152,6 +152,10 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&dryRunMode, "dry-run", false, "Read-only preview of the update plan (update only)")
 	installUpdateNoticeHelp(rootCmd)
 
+	// Attach the cached update notice to every command's meta.notices, read-only
+	// from the local cache (no network). Omitted when the cache has nothing.
+	output.UpdateNoticesProvider = cachedUpdateNoticesAsAny
+
 	// Resolve and validate output flags before any command runs.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		// --json is a compatibility alias that forces JSON output.

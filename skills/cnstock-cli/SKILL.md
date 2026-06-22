@@ -1,10 +1,10 @@
 ---
 name: cnstock-cli
-version: "1.1.7"
+version: "1.1.8"
 description: "Real-time quotes, K-line history, intraday minutes, stock search, sector ranking, and whole-market breadth for A-shares, HK stocks, US stocks, indices, and funds via cnstock-cli. Use when users ask for stock prices, market data, stock-code lookup, K-line history, intraday data, sectors, or Chinese market breadth."
 license: MIT
 user-invocable: true
-metadata: {"requires":{"bins":["cnstock-cli"],"min_version":"1.1.7"}}
+metadata: {"requires":{"bins":["cnstock-cli"],"min_version":"1.1.8"}}
 ---
 
 # cnstock-cli
@@ -142,6 +142,8 @@ After the update succeeds, review `signature_status`/`signature_verified`, ensur
 cnstock-cli changelog --since <previous-version> --compact
 cnstock-cli reference --compact
 ```
+
+When an update is available, the notice ALSO rides along on **every** command's `meta.notices` (read-only from the local cache — no network, no phone-home; omitted when nothing is cached). The notice is **severity-graded**: `warning` when the changelog delta since the running version contains a `security` entry or the latest crosses a major version, otherwise `info`. The fresh/active view still lives in `data.notices` on `context`/`doctor`/`update --check`; `meta.notices` is the cached view available everywhere.
 
 ## Error Handling
 

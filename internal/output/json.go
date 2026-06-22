@@ -24,6 +24,24 @@ type Envelope struct {
 // Meta contains non-contractual execution metadata.
 type Meta struct {
 	DurationMS int64 `json:"duration_ms"`
+	Notices    []any `json:"notices,omitempty"`
+}
+
+// UpdateNoticesProvider, when set, supplies ambient operational notices (currently
+// the cached update-available notice) for meta.notices. It is wired by package cmd
+// to read ONLY the local update-notice cache (no network). It is a hook to avoid an
+// import cycle between cmd and output. When nil or returning no notices, meta.notices
+// is omitted.
+var UpdateNoticesProvider func() []any
+
+// metaWithNotices builds a Meta for the given duration and attaches cached update
+// notices from UpdateNoticesProvider when present.
+func metaWithNotices(duration time.Duration) *Meta {
+	meta := &Meta{DurationMS: duration.Milliseconds()}
+	if UpdateNoticesProvider != nil {
+		meta.Notices = UpdateNoticesProvider()
+	}
+	return meta
 }
 
 // ErrorPayload describes a machine-readable CLI failure.
@@ -71,7 +89,7 @@ func RenderEnvelope(v any, fields []string, compact bool, duration time.Duration
 		OK:            true,
 		SchemaVersion: SchemaVersion,
 		Data:          &raw,
-		Meta:          &Meta{DurationMS: duration.Milliseconds()},
+		Meta:          metaWithNotices(duration),
 	}
 	writeJSON(os.Stdout, payload, compact)
 }
@@ -185,7 +203,7 @@ func PrintErrorEnvelopeWithDuration(msg string, code ErrorCode, retryable bool, 
 	payload := Envelope{
 		OK:            false,
 		SchemaVersion: SchemaVersion,
-		Meta:          &Meta{DurationMS: duration.Milliseconds()},
+		Meta:          metaWithNotices(duration),
 		Error: &ErrorPayload{
 			Code:      code,
 			Message:   msg,
