@@ -56,12 +56,16 @@ type latestRelease struct {
 }
 
 type updateReport struct {
-	CurrentVersion    string         `json:"current_version"`
-	LatestVersion     string         `json:"latest_version"`
-	TargetVersion     string         `json:"target_version"`
-	UpdateAvailable   *bool          `json:"update_available,omitempty"`
-	Status            string         `json:"status"`
-	InstallMethod     string         `json:"install_method"`
+	CurrentVersion  string `json:"current_version"`
+	LatestVersion   string `json:"latest_version"`
+	TargetVersion   string `json:"target_version"`
+	UpdateAvailable *bool  `json:"update_available,omitempty"`
+	Status          string `json:"status"`
+	InstallMethod   string `json:"install_method"`
+	// Command is the single canonical PM/binary command an agent or user can run
+	// (contract field name: "command"). For github-binary installs this is the
+	// download+verify+replace descriptor; for npm/go-install it is the PM command.
+	Command           string         `json:"command"`
 	ReleaseURL        string         `json:"release_url"`
 	RecommendedAction string         `json:"recommended_action"`
 	Commands          []string       `json:"commands"`
@@ -118,6 +122,7 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 		TargetVersion:     target,
 		Status:            "checked",
 		InstallMethod:     detectInstallMethod(),
+		Command:           command,
 		ReleaseURL:        rel.HTMLURL,
 		RecommendedAction: command,
 		Commands:          []string{command},
@@ -531,6 +536,7 @@ func runPackageManagerInstall(ctx context.Context, method, targetVersion string)
 // shows the command without executing it.
 func runPackageManagerUpdate(ctx context.Context, report updateReport, method, targetVersion string) error {
 	pmCmd := pmInstallCommand(method, targetVersion)
+	report.Command = pmCmd
 	report.Commands = []string{pmCmd}
 	report.RecommendedAction = pmCmd
 

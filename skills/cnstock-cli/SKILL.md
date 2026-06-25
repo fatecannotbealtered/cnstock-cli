@@ -120,7 +120,12 @@ cnstock-cli sectors --board hy --top 10 --direction up --compact
 
 ## Update Awareness
 
-`update` is a **single command with no confirm token**. A bare `cnstock-cli update` performs the whole self-update in one call — resolve the latest (or `--target-version`) release, verify integrity in-process (Sigstore signature, then SHA256 checksum), replace the binary, then sync the whole Agent Skill directory. It is idempotent: already on the latest version returns `ok` with a no-op. `--check` and `--dry-run` are optional read-only flags and issue no token. The Skill sync end state matches `npx skills add fatecannotbealtered/cnstock-cli -y -g`.
+`update` is a **single command with no confirm token**. A bare `cnstock-cli update` performs the whole self-update in one call — resolve the latest (or `--target-version`) release, update the binary, then sync the whole Agent Skill directory. It is idempotent: already on the latest version returns `ok` with a no-op. `--check` and `--dry-run` are optional read-only flags and issue no token. The Skill sync end state matches `npx skills add fatecannotbealtered/cnstock-cli -y -g`.
+
+The update mechanism depends on how the binary was installed (`install_method`):
+
+- **`github-binary`**: Download + verify integrity in-process (Sigstore signature, then SHA256 checksum) + replace binary. `signature_status` is `"verified"` on success; a missing/invalid signature or checksum mismatch returns non-retryable `E_INTEGRITY`.
+- **`npm`** or **`go-install`**: Drive the package manager (`npm install -g <pkg>@<ver>` or `go install <pkg>@<ver>`); the package manager owns download and integrity. `signature_status` stays `"not_checked"` on this path.
 
 ```bash
 cnstock-cli update --compact            # do the whole update in one call
@@ -136,7 +141,7 @@ Every update failure (and a SIGINT/SIGTERM interrupt) carries `stage`, `current_
 - a Skill-sync failure **after** the binary swap is partial success (`ok:false`, `binary_replaced:true`): run the returned `skill_sync_command`, then `changelog`. Do not use newly documented behavior until the Skill sync completes.
 - an interrupt emits a terminal `E_INTERRUPTED` envelope (exit 130) stating the true post-state.
 
-After the update succeeds, review `signature_status`/`signature_verified`, ensure `skill_sync_status` is `synced`, then refresh agent knowledge before continuing:
+After the update succeeds, ensure `skill_sync_status` is `synced`. For `github-binary` installs, also review `signature_status`/`signature_verified` — they will be `"verified"`/`true`. For `npm`/`go-install` installs, `signature_status` stays `"not_checked"` (the package manager owns integrity). Refresh agent knowledge before continuing:
 
 ```bash
 cnstock-cli changelog --since <previous-version> --compact
@@ -168,7 +173,7 @@ cnstock-cli's market-data surface is T0/read-only; `update` is local lifecycle w
 
 - No credentials are required or stored for market-data usage.
 - Market-data and self-description commands do not write external state.
-- `update` may replace the local package/binary and sync the whole Agent Skill directory; a bare `update` runs the whole flow with no confirm token (its safety guarantee is in-process Sigstore signature verification).
+- `update` may replace the local package/binary and sync the whole Agent Skill directory; a bare `update` runs the whole flow with no confirm token. For `github-binary` installs its safety guarantee is in-process Sigstore signature + SHA256 verification (`signature_status: "verified"`). For `npm`/`go-install` installs the package manager owns integrity (`signature_status: "not_checked"`).
 - Agent-controlled permission escalation is not available.
 - Market-data commands reject `--dry-run`.
 - Endpoint overrides may contain local proxy secrets; `context` and `doctor` redact URL credentials and sensitive query params.
