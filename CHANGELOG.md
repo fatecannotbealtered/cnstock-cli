@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.10] - 2026-06-25
+
 ### Added
 
 - Fleet contract single-source: `contract/contract.json` (vendored from ai-native-cli-spec@v1.4) and the generated `internal/contract/contract_gen.go` are now the canonical exit-code and retryability source for this tool. All error-code→exit and code→retryable lookups in `internal/output` now delegate to `contract.ExitFor`/`contract.Retryable` so the mapping cannot drift. `contract/contract-ext.json` declares the tool-specific `E_HUMAN_REQUIRED` (exit 9) extension code.
