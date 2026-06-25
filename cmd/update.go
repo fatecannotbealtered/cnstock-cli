@@ -431,14 +431,27 @@ func npmPackageJSONMatches(root string) bool {
 }
 
 // installedViaGo reports whether the executable sits in the Go install bin dir.
+// The caller resolves symlinks on the executable path, so each candidate bin dir
+// is resolved the same way before comparing — otherwise a symlinked temp/home dir
+// (e.g. macOS /var -> /private/var, or a Windows short path) never matches.
 func installedViaGo(exe string) bool {
-	dir := filepath.Clean(filepath.Dir(exe))
+	dir := resolveDir(filepath.Dir(exe))
 	for _, bin := range goInstallBinDirs() {
-		if bin != "" && filepath.Clean(bin) == dir {
+		if bin != "" && resolveDir(bin) == dir {
 			return true
 		}
 	}
 	return false
+}
+
+// resolveDir cleans dir and resolves symlinks when possible, falling back to the
+// cleaned path if resolution fails (e.g. the dir does not exist).
+func resolveDir(dir string) string {
+	cleaned := filepath.Clean(dir)
+	if resolved, err := filepath.EvalSymlinks(cleaned); err == nil {
+		return resolved
+	}
+	return cleaned
 }
 
 // goInstallBinDirs lists candidate Go install bin directories: $GOBIN, then
