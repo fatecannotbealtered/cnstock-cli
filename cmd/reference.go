@@ -191,7 +191,6 @@ func buildReference() referenceData {
 			}},
 			{Path: "update", Type: "write", Description: "Single-command self-update: resolve the latest (or --target-version) release, verify integrity in-process (signature then checksum), replace the binary, and sync the whole Agent Skill directory. Idempotent and confirm-token-free; --check and --dry-run are optional read-only.", PermissionTier: "local-write", RawSupported: true, Pagination: "none", OutputSchema: "update_report", Examples: []string{"cnstock-cli update --compact", "cnstock-cli update --check --compact", "cnstock-cli update --dry-run --compact"}, Params: []referenceParam{
 				{Name: "--check", Type: "bool", Description: "Read-only probe for an available update; changes nothing."},
-				{Name: "--method", Type: "enum", Default: "auto", Description: "Preferred update method hint: auto|npm|go|github."},
 				{Name: "--target-version", Type: "semver", Description: "Install a specific version instead of the latest release."},
 			}},
 		},

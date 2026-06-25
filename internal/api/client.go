@@ -148,25 +148,13 @@ func (c *Client) doOnce(ctx context.Context, url string) ([]byte, bool, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode >= 500 {
-		return nil, true, newServerError("HTTP %d %s", resp.StatusCode, resp.Status)
-	}
-	// Map upstream client-error statuses onto the error taxonomy so an agent can
-	// distinguish "bad symbol" (404) from "rate limited" (429) via error.code +
-	// retryable, instead of every 4xx collapsing to E_NETWORK.
-	switch resp.StatusCode {
-	case http.StatusOK:
-		// healthy; fall through to body read
-	case http.StatusNotFound:
-		return nil, false, newNotFoundError("HTTP %d %s", resp.StatusCode, resp.Status)
-	case http.StatusTooManyRequests:
-		return nil, true, newRateLimitError("HTTP %d %s", resp.StatusCode, resp.Status)
-	case http.StatusUnauthorized:
-		return nil, false, newAuthError("HTTP %d %s", resp.StatusCode, resp.Status)
-	case http.StatusForbidden:
-		return nil, false, newForbiddenError("HTTP %d %s", resp.StatusCode, resp.Status)
-	default:
-		return nil, false, newNetworkError("HTTP %d %s", resp.StatusCode, resp.Status)
+	// Map upstream statuses onto the error taxonomy through the single shared
+	// mapper so an agent can distinguish "bad symbol" (404) from "rate limited"
+	// (429), instead of every non-2xx collapsing to E_NETWORK. retryable is the
+	// transient subset (5xx, 429, 408); an unmapped 4xx is a client error and is
+	// not retried.
+	if err := ErrorForStatus(resp.StatusCode, "HTTP %d %s", resp.StatusCode, resp.Status); err != nil {
+		return nil, statusRetryable(resp.StatusCode), err
 	}
 
 	body, err := io.ReadAll(resp.Body)

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -28,10 +29,8 @@ const (
 )
 
 var (
-	updateMethod        = "auto"
 	updateTargetVersion string
 	updateCheckOnly     bool
-	updateNow           = time.Now
 	updateExecCommand   = exec.CommandContext
 	updateSkillSync     = runUpdateSkillSync
 )
@@ -47,7 +46,6 @@ var updateCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(updateCmd)
 	updateCmd.Flags().BoolVar(&updateCheckOnly, "check", false, "Check for an available update without installing")
-	updateCmd.Flags().StringVar(&updateMethod, "method", "auto", "Update method hint: auto|npm|go|github")
 	updateCmd.Flags().StringVar(&updateTargetVersion, "target-version", "", "Install a specific version (for example 1.2.3 or v1.2.3)")
 }
 
@@ -83,7 +81,11 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 	// emits a terminal JSON envelope instead of dying as a bare killed process.
 	// The cancelled context aborts in-flight HTTP/IO; performBinaryUpdate cleans
 	// its temp dir on return, so nothing is left half-applied before the swap.
-	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	parent := cmd.Context()
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -114,7 +116,7 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 		LatestVersion:     rel.TagName,
 		TargetVersion:     target,
 		Status:            "checked",
-		InstallMethod:     "github-binary",
+		InstallMethod:     detectInstallMethod(),
 		ReleaseURL:        rel.HTMLURL,
 		RecommendedAction: command,
 		Commands:          []string{command},
@@ -161,7 +163,7 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 	// in-process Sigstore verification below, not an agent's review of a preview.
 	// Download + verify (signature then checksum) + replace binary, no dependency
 	// on npm/go/pip; an unsigned or unverifiable release is refused.
-	status, sigStatus, _, err := performBinaryUpdate(ctx, target)
+	_, sigStatus, _, err := performBinaryUpdate(ctx, target)
 	if err != nil {
 		stage := updateStageOf(err)
 		if ctx.Err() != nil {
@@ -194,10 +196,6 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 	report.BinaryReplaced = true
 	report.PreviousVersion = version
 	report.Status = "updated"
-	if status == "scheduled" {
-		report.Status = "scheduled"
-		report.Notes = append(report.Notes, "binary replacement scheduled; restart the command after this process exits")
-	}
 
 	// Skill sync runs AFTER the swap. A failure here is PARTIAL SUCCESS: the
 	// binary is already on the new version, the agent just needs to run the skill
@@ -233,8 +231,7 @@ func updateFailStaged(msg string, code output.ErrorCode, exitCode int, stage, cu
 	if outputFormat == "text" {
 		output.Error(msg)
 	} else {
-		retryable := code == output.ErrNetwork || code == output.ErrTimeout || code == output.ErrRateLimit || code == output.ErrServer
-		output.PrintErrorEnvelopeWithDuration(msg, code, retryable, updateFailDetails(stage, currentVersion, binaryReplaced, skillSyncStatus), compactMode, commandDuration())
+		output.PrintErrorEnvelopeWithDuration(msg, code, output.IsRetryable(code), updateFailDetails(stage, currentVersion, binaryReplaced, skillSyncStatus), compactMode, commandDuration())
 	}
 	setExitCode(exitCode)
 	return ErrSilent
@@ -330,11 +327,12 @@ func fetchLatestRelease(ctx context.Context, client *http.Client, endpoint strin
 		return latestRelease{}, "", api.NewNetworkError("reading update response: %v", err)
 	}
 	raw := string(body)
-	if resp.StatusCode >= 500 {
-		return latestRelease{}, raw, api.NewNetworkError("checking latest release: HTTP %d %s", resp.StatusCode, resp.Status)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return latestRelease{}, raw, api.NewServerError("checking latest release: HTTP %d %s", resp.StatusCode, resp.Status)
+	// Classify by status through the single status->error mapping so a 404
+	// (no release/repo gone) is non-retryable E_NOT_FOUND, 408 is E_TIMEOUT,
+	// 429 is E_RATE_LIMITED, and 5xx is E_SERVER — matching fetchBinaryRelease
+	// instead of collapsing every non-200 into a retryable server error.
+	if err := api.ErrorForStatus(resp.StatusCode, "checking latest release at %s: HTTP %d %s", api.RedactURL(endpoint), resp.StatusCode, resp.Status); err != nil {
+		return latestRelease{}, raw, err
 	}
 
 	var rel latestRelease
@@ -345,6 +343,122 @@ func fetchLatestRelease(ctx context.Context, client *http.Client, endpoint strin
 		return latestRelease{}, raw, api.NewServerError("update response missing tag_name")
 	}
 	return rel, raw, nil
+}
+
+// updateBinaryExecutableProbe resolves the running executable for install-method
+// detection. It is a seam so tests can simulate npm/go/binary install layouts.
+var updateBinaryExecutableProbe = os.Executable
+
+// detectInstallMethod probes how this binary was installed so the report and the
+// update notice describe the real channel instead of a hardcoded value:
+//   - "npm" when the executable lives under a node_modules tree whose nearest
+//     package.json names this package;
+//   - "go-install" when it lives under the Go install bin dir ($GOBIN, $GOPATH/bin,
+//     or the default ~/go/bin);
+//   - "github-binary" otherwise (the self-contained download path this tool drives).
+//
+// The self-update mechanism is the same for every method (download + verify +
+// replace); the value is informational so an agent knows which package manager,
+// if any, also tracks the binary.
+func detectInstallMethod() string {
+	exe, err := updateBinaryExecutableProbe()
+	if err != nil || strings.TrimSpace(exe) == "" {
+		return "github-binary"
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	if installedViaNpm(exe) {
+		return "npm"
+	}
+	if installedViaGo(exe) {
+		return "go-install"
+	}
+	return "github-binary"
+}
+
+// installedViaNpm reports whether the executable lives under a node_modules tree
+// in this package's directory. The package manifest lives at
+// node_modules/<scope>/<name>/package.json (one or two levels below node_modules),
+// so it walks up from the executable — only while still inside node_modules —
+// looking for a package.json that names this package.
+func installedViaNpm(exe string) bool {
+	if !hasNodeModulesSegment(exe) {
+		return false
+	}
+	dir := filepath.Dir(exe)
+	for {
+		base := filepath.Base(dir)
+		if base == "node_modules" {
+			// Climbed out of the package dir without a matching manifest.
+			return false
+		}
+		if npmPackageJSONMatches(dir) {
+			return true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return false
+		}
+		dir = parent
+	}
+}
+
+// hasNodeModulesSegment reports whether any path segment of p is "node_modules".
+func hasNodeModulesSegment(p string) bool {
+	for _, seg := range strings.Split(filepath.ToSlash(p), "/") {
+		if seg == "node_modules" {
+			return true
+		}
+	}
+	return false
+}
+
+// npmPackageJSONMatches reads <root>/package.json and reports whether its name is
+// this npm package.
+func npmPackageJSONMatches(root string) bool {
+	data, err := os.ReadFile(filepath.Join(root, "package.json"))
+	if err != nil {
+		return false
+	}
+	var pkg struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(data, &pkg); err != nil {
+		return false
+	}
+	return strings.TrimSpace(pkg.Name) == npmPackageName
+}
+
+// installedViaGo reports whether the executable sits in the Go install bin dir.
+func installedViaGo(exe string) bool {
+	dir := filepath.Clean(filepath.Dir(exe))
+	for _, bin := range goInstallBinDirs() {
+		if bin != "" && filepath.Clean(bin) == dir {
+			return true
+		}
+	}
+	return false
+}
+
+// goInstallBinDirs lists candidate Go install bin directories: $GOBIN, then
+// $GOPATH/bin for each GOPATH entry, then the default ~/go/bin.
+func goInstallBinDirs() []string {
+	var dirs []string
+	if gobin := strings.TrimSpace(os.Getenv("GOBIN")); gobin != "" {
+		dirs = append(dirs, gobin)
+	}
+	if gopath := strings.TrimSpace(os.Getenv("GOPATH")); gopath != "" {
+		for _, p := range filepath.SplitList(gopath) {
+			if p != "" {
+				dirs = append(dirs, filepath.Join(p, "bin"))
+			}
+		}
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		dirs = append(dirs, filepath.Join(home, "go", "bin"))
+	}
+	return dirs
 }
 
 func updateSkillSyncCommand() string {

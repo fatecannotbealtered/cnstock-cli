@@ -231,6 +231,14 @@ func writeJSON(w io.Writer, v any, compact bool) {
 	_, _ = fmt.Fprintln(w, string(data))
 }
 
+// IsRetryable reports whether an error code denotes a transient failure an agent
+// should back off and retry. It is the single source of truth for the
+// code->retryable mapping; the error-envelope helpers and the cmd-layer update
+// failure path both route through it so the two cannot drift.
+func IsRetryable(code ErrorCode) bool {
+	return isRetryable(code)
+}
+
 func isRetryable(code ErrorCode) bool {
 	switch code {
 	case ErrNetwork, ErrServer, ErrRateLimit, ErrTimeout, ErrInterrupted:

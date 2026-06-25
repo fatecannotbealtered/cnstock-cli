@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.9] - 2026-06-25
+
+### Changed
+
+- Windows binary self-update now performs the **same in-process rename trick** as Unix: the running executable is moved aside to `.<name>.old`, the freshly verified binary is renamed into place, and on failure the original is rolled back. This replaces the previous `.cmd` replace-on-restart helper script, so `update` completes the swap in one call and reports `status: "updated"` / `binary_replaced: true` immediately — there is no longer a `"scheduled"` status or a restart-deferred pending state.
+- `update` now reports a **real `install_method`** (`npm`, `go-install`, or `github-binary`) probed from the running executable's location (node_modules manifest / Go bin dir), instead of a hardcoded `github-binary`. The notice cache surfaces the same detected value.
+
+### Removed
+
+- The dead `update --method` flag (an `auto|npm|go|github` "hint" that nothing read — `install_method` was hardcoded) is removed.
+
+### Fixed
+
+- `update` no longer misclassifies a **failure to download the Sigstore signature bundle** as a non-retryable `E_INTEGRITY` supply-chain failure. The bundle fetch is a network step: a transient fetch failure (or a SIGINT) is now classified by the normal taxonomy (retryable `E_NETWORK`/`E_TIMEOUT`/`E_SERVER`, or `E_INTERRUPTED`) at `stage: "download"`; only an actually invalid/missing-then-refused signature or a checksum mismatch yields `E_INTEGRITY` (CLI-SPEC §14, SEC-SPEC §5).
+- `update` **discover-stage** HTTP failures are now classified by status onto the taxonomy instead of collapsing into `E_NETWORK`: `404 → E_NOT_FOUND` (exit 3, non-retryable), `408 → E_TIMEOUT`, `429 → E_RATE_LIMITED`, `5xx → E_SERVER` (all retryable). The status→code→exit mapping now lives in a single shared `api.ErrorForStatus`, used by both the data client and the self-update path so it cannot drift (CLI-SPEC §6).
+- `update`'s **latest-release probe** (`fetchLatestRelease` — the first network call of every update and the notice-refresh path) is now routed through the same `api.ErrorForStatus` mapping as the binary-release discover: a real `404` on `/releases/latest` (the release or repo is gone) is the non-retryable `E_NOT_FOUND` (exit 3) the contract requires, rather than a retryable `E_SERVER`. Previously only the binary-release discover had been migrated, so this main-path probe still collapsed every non-`200` (except `5xx`) into a retryable server error (CLI-SPEC §6).
+- The `code → retryable` decision in the staged update-failure envelope is now derived from the single `output.IsRetryable` predicate instead of a duplicated local table, so the two cannot disagree.
+
 ## [1.1.8] - 2026-06-22
 
 ### Added

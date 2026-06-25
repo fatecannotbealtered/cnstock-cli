@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"net/http"
 )
 
 // ValidationError indicates bad arguments (e.g. invalid limit, empty keyword).
@@ -54,6 +55,13 @@ type ForbiddenError struct {
 
 func (e *ForbiddenError) Error() string { return e.Msg }
 
+// TimeoutError indicates the upstream reported a request timeout (HTTP 408).
+type TimeoutError struct {
+	Msg string
+}
+
+func (e *TimeoutError) Error() string { return e.Msg }
+
 // newValidationError creates a ValidationError.
 func newValidationError(format string, args ...any) error {
 	return &ValidationError{Msg: fmt.Sprintf(format, args...)}
@@ -89,19 +97,46 @@ func newNotFoundError(format string, args ...any) error {
 	return &NotFoundError{Msg: fmt.Sprintf(format, args...)}
 }
 
-// newRateLimitError creates a RateLimitError.
-func newRateLimitError(format string, args ...any) error {
-	return &RateLimitError{Msg: fmt.Sprintf(format, args...)}
+// statusRetryable reports whether an upstream HTTP status is a transient failure
+// worth retrying: 5xx, 429 (rate-limited), and 408 (timeout). Other 4xx are client
+// errors and are not retried.
+func statusRetryable(statusCode int) bool {
+	switch {
+	case statusCode >= 500:
+		return true
+	case statusCode == http.StatusTooManyRequests, statusCode == http.StatusRequestTimeout:
+		return true
+	default:
+		return false
+	}
 }
 
-// newAuthError creates an AuthError.
-func newAuthError(format string, args ...any) error {
-	return &AuthError{Msg: fmt.Sprintf(format, args...)}
-}
-
-// newForbiddenError creates a ForbiddenError.
-func newForbiddenError(format string, args ...any) error {
-	return &ForbiddenError{Msg: fmt.Sprintf(format, args...)}
+// ErrorForStatus maps an upstream HTTP status onto the error taxonomy so callers
+// classify failure modes by status (404 vs 429 vs 5xx) instead of collapsing
+// every non-2xx into E_NETWORK. This is the single source of the status->error
+// mapping (CLI-SPEC §6); the client and the self-update path both route through it
+// so the status->code->exit contract cannot drift. A 2xx status returns nil.
+func ErrorForStatus(statusCode int, format string, args ...any) error {
+	if statusCode >= 200 && statusCode < 300 {
+		return nil
+	}
+	msg := fmt.Sprintf(format, args...)
+	switch {
+	case statusCode == http.StatusNotFound:
+		return &NotFoundError{Msg: msg}
+	case statusCode == http.StatusRequestTimeout:
+		return &TimeoutError{Msg: msg}
+	case statusCode == http.StatusTooManyRequests:
+		return &RateLimitError{Msg: msg}
+	case statusCode == http.StatusUnauthorized:
+		return &AuthError{Msg: msg}
+	case statusCode == http.StatusForbidden:
+		return &ForbiddenError{Msg: msg}
+	case statusCode >= 500:
+		return &ServerError{Msg: msg}
+	default:
+		return &NetworkError{Msg: msg}
+	}
 }
 
 // Quote represents a real-time stock quote.
@@ -193,6 +228,8 @@ func classifyBatchError(err error) *BatchItemError {
 		return &BatchItemError{Code: "E_AUTH", Retryable: false, Message: err.Error()}
 	case errors.As(err, new(*ForbiddenError)):
 		return &BatchItemError{Code: "E_FORBIDDEN", Retryable: false, Message: err.Error()}
+	case errors.As(err, new(*TimeoutError)):
+		return &BatchItemError{Code: "E_TIMEOUT", Retryable: true, Message: err.Error()}
 	case errors.As(err, new(*ServerError)):
 		return &BatchItemError{Code: "E_SERVER", Retryable: true, Message: err.Error()}
 	case errors.As(err, new(*NetworkError)):

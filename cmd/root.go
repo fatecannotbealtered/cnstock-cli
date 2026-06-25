@@ -38,8 +38,14 @@ func classifyError(err error) (output.ErrorCode, int, bool) {
 	if errors.As(err, &serverErr) {
 		return output.ErrServer, ExitTransient, true
 	}
+	var timeoutErr *api.TimeoutError
+	if errors.As(err, &timeoutErr) {
+		return output.ErrTimeout, ExitTimeout, true
+	}
 	var networkErr *api.NetworkError
 	if errors.As(err, &networkErr) {
+		// A context-deadline transport failure is a timeout, not a generic network
+		// error; the upstream HTTP 408 path is already a *TimeoutError above.
 		if isTimeoutError(networkErr.Error()) {
 			return output.ErrTimeout, ExitTimeout, true
 		}

@@ -13,11 +13,12 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/fatecannotbealtered/cnstock-cli/internal/api"
 )
 
 // This file gives cnstock-cli a self-contained binary self-update: download the
@@ -133,9 +134,8 @@ type updateBinaryRelease struct {
 }
 
 type updateApplyResult struct {
-	Status      string
-	Path        string
-	PendingPath string
+	Status string
+	Path   string
 }
 
 // performBinaryUpdate downloads, verifies, and installs the target release
@@ -185,8 +185,18 @@ func performBinaryUpdate(ctx context.Context, targetVersion string) (status, sig
 		return "", "", "", withStage(updateStageDownload, fmt.Errorf("downloading checksums: %w", err))
 	}
 
+	// Verify the signature. A missing bundle or a failed verification is a
+	// supply-chain integrity failure (E_INTEGRITY, non-retryable). DOWNLOADING the
+	// bundle, however, is a network step: a transient fetch failure (or a ctx
+	// interrupt) must classify as retryable network/timeout, not as a forged
+	// release. verifyUpdateChecksumSignature distinguishes the two via a wrapped
+	// download error so the caller assigns the right stage and code.
 	signatureStatus, err = verifyUpdateChecksumSignature(ctx, checksumPath, bundleURL, tmpDir)
 	if err != nil {
+		var de *signatureDownloadError
+		if errors.As(err, &de) {
+			return "", "", "", withStage(updateStageDownload, de.err)
+		}
 		return "", "", "", withStage(updateStageVerifySignature, newIntegrityError(fmt.Errorf("verifying release signature: %w", err)))
 	}
 	if err := verifyUpdateChecksum(archivePath, checksumPath, assetName); err != nil {
@@ -207,17 +217,28 @@ func performBinaryUpdate(ctx context.Context, targetVersion string) (status, sig
 	return applied.Status, signatureStatus, applied.Path, nil
 }
 
+// signatureDownloadError marks a failure to FETCH the signature bundle (network /
+// timeout / interrupt), as opposed to a signature that fails to verify. The caller
+// classifies the wrapped cause through the normal taxonomy (retryable network/
+// timeout) instead of as a non-retryable E_INTEGRITY supply-chain failure.
+type signatureDownloadError struct{ err error }
+
+func (e *signatureDownloadError) Error() string { return e.err.Error() }
+func (e *signatureDownloadError) Unwrap() error { return e.err }
+
 // verifyUpdateChecksumSignature enforces a mandatory, in-process Sigstore
 // signature check on checksums.txt. There is no skip path: a release without a
 // signature bundle, or one whose signature does not verify against this repo's
-// release-workflow identity, is refused.
+// release-workflow identity, is refused (integrity failure). A failure to fetch
+// the bundle is returned wrapped in *signatureDownloadError so the caller can tell
+// a transient download blip apart from a forged release.
 func verifyUpdateChecksumSignature(ctx context.Context, checksumPath, bundleURL, tmpDir string) (string, error) {
 	if strings.TrimSpace(bundleURL) == "" {
 		return "missing", errors.New("release does not include checksums.txt.sigstore.json; refusing to install an unsigned release")
 	}
 	bundlePath := filepath.Join(tmpDir, "checksums.txt.sigstore.json")
 	if err := downloadUpdateFile(ctx, bundleURL, bundlePath); err != nil {
-		return "download_failed", fmt.Errorf("downloading checksum signature bundle: %w", err)
+		return "download_failed", &signatureDownloadError{err: fmt.Errorf("downloading checksum signature bundle: %w", err)}
 	}
 	if err := updateVerifySignature(checksumPath, bundlePath, updateSignerIdentityRegexp()); err != nil {
 		return "failed", err
@@ -244,8 +265,11 @@ func fetchBinaryRelease(ctx context.Context, targetVersion string) (*updateBinar
 	if err != nil {
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("GET %s returned %d: %s", url, resp.StatusCode, truncateUpdateMessage(string(data), 200))
+	// Classify by status so a 404 (tag/release gone) is non-retryable E_NOT_FOUND,
+	// a 408 is E_TIMEOUT, 429 is E_RATE_LIMITED, and 5xx is E_SERVER — instead of
+	// every non-2xx collapsing to E_NETWORK at the caller.
+	if err := api.ErrorForStatus(resp.StatusCode, "GET %s returned %d: %s", api.RedactURL(url), resp.StatusCode, truncateUpdateMessage(string(data), 200)); err != nil {
+		return nil, err
 	}
 	var rel updateBinaryRelease
 	if err := json.Unmarshal(data, &rel); err != nil {
@@ -306,9 +330,9 @@ func downloadUpdateFile(ctx context.Context, url, dest string) error {
 		return fmt.Errorf("executing request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		data, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("GET %s returned %d: %s", url, resp.StatusCode, truncateUpdateMessage(string(data), 200))
+		return api.ErrorForStatus(resp.StatusCode, "GET %s returned %d: %s", api.RedactURL(url), resp.StatusCode, truncateUpdateMessage(string(data), 200))
 	}
 	tmp := dest + ".part"
 	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
@@ -453,60 +477,49 @@ func writeExtractedUpdateBinary(tmpDir, name string, r io.Reader) (string, error
 	return outPath, nil
 }
 
+// applyUpdateBinary installs the freshly extracted binary over the running
+// executable using a cross-platform rename trick (identical on Windows and
+// Unix): write `.<base>.new`, move the in-use binary aside to `.<base>.old`,
+// rename `.new` into place, and on failure roll back from `.old`. On Windows a
+// running executable can still be renamed (just not overwritten or deleted), so
+// this commits atomically in-process — no .cmd helper, no restart deferral. The
+// leftover `.old` is best-effort removed; if Windows still has it locked, the
+// removal is ignored and it is reaped on a later run.
 func applyUpdateBinary(src, dst string) (updateApplyResult, error) {
-	if runtime.GOOS == "windows" {
-		return scheduleWindowsBinaryReplace(src, dst)
+	target := dst
+	if resolved, err := filepath.EvalSymlinks(dst); err == nil {
+		target = resolved
 	}
 	mode := os.FileMode(0o755)
-	if st, err := os.Stat(dst); err == nil {
+	if st, err := os.Stat(target); err == nil {
 		mode = st.Mode().Perm()
 		if mode&0o111 == 0 {
 			mode |= 0o755
 		}
 	}
-	tmpName := fmt.Sprintf(".%s.update-%d", filepath.Base(dst), updateNow().UnixNano())
-	tmpPath := filepath.Join(filepath.Dir(dst), tmpName)
-	if err := updateCopyFile(src, tmpPath, mode); err != nil {
-		return updateApplyResult{}, err
-	}
-	if err := os.Rename(tmpPath, dst); err != nil {
-		_ = os.Remove(tmpPath)
-		return updateApplyResult{}, err
-	}
-	return updateApplyResult{Status: "installed", Path: dst}, nil
-}
+	dir := filepath.Dir(target)
+	base := filepath.Base(target)
+	newPath := filepath.Join(dir, "."+base+".new")
+	backupPath := filepath.Join(dir, "."+base+".old")
 
-func scheduleWindowsBinaryReplace(src, dst string) (updateApplyResult, error) {
-	pending := dst + ".new"
-	if err := updateCopyFile(src, pending, 0o755); err != nil {
+	_ = os.Remove(newPath)
+	if err := updateCopyFile(src, newPath, mode); err != nil {
 		return updateApplyResult{}, err
 	}
-	scriptPath := filepath.Join(os.TempDir(), fmt.Sprintf("cnstock-cli-update-%d.cmd", updateNow().UnixNano()))
-	script := strings.Join([]string{
-		"@echo off",
-		"setlocal",
-		"set \"PENDING=" + batchEscape(pending) + "\"",
-		"set \"TARGET=" + batchEscape(dst) + "\"",
-		"for /L %%I in (1,1,30) do (",
-		"  move /Y \"%PENDING%\" \"%TARGET%\" > nul 2>&1",
-		"  if not exist \"%PENDING%\" goto done",
-		"  ping 127.0.0.1 -n 2 > nul",
-		")",
-		":done",
-		"del \"%~f0\" > nul 2>&1",
-		"",
-	}, "\r\n")
-	if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
-		return updateApplyResult{}, err
-	}
-	if err := exec.Command("cmd", "/C", "start", "", "/B", scriptPath).Start(); err != nil {
-		return updateApplyResult{}, err
-	}
-	return updateApplyResult{Status: "scheduled", Path: dst, PendingPath: pending}, nil
-}
 
-func batchEscape(s string) string {
-	return strings.NewReplacer("%", "%%", "^", "^^", "&", "^&", "<", "^<", ">", "^>", "|", "^|").Replace(s)
+	_ = os.Remove(backupPath)
+	if err := os.Rename(target, backupPath); err != nil {
+		_ = os.Remove(newPath)
+		return updateApplyResult{}, fmt.Errorf("preparing to replace %s: %w", target, err)
+	}
+	if err := os.Rename(newPath, target); err != nil {
+		_ = os.Rename(backupPath, target)
+		return updateApplyResult{}, fmt.Errorf("replacing %s: %w; original restored", target, err)
+	}
+	// Best-effort cleanup; on Windows the old binary may still be locked by the
+	// running process and refuse deletion — that is fine, it is reaped later.
+	_ = os.Remove(backupPath)
+	return updateApplyResult{Status: "installed", Path: target}, nil
 }
 
 func updateCopyFile(src, dst string, mode os.FileMode) error {

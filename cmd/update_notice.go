@@ -78,7 +78,7 @@ func refreshUpdateNotices(ctx context.Context, source string) []updateNotice {
 		LatestVersion:     rel.TagName,
 		TargetVersion:     latest,
 		UpdateAvailable:   &available,
-		InstallMethod:     "github-binary",
+		InstallMethod:     detectInstallMethod(),
 		ReleaseURL:        rel.HTMLURL,
 		RecommendedAction: binaryUpdateDescriptor(latest),
 	}
@@ -93,7 +93,7 @@ func refreshUpdateNotices(ctx context.Context, source string) []updateNotice {
 // updateNoticeSeverity grades the update notice from the embedded CHANGELOG delta
 // between the running version (current) and the latest. It returns "warning" when
 // the delta contains a security entry OR the latest crosses a major version;
-// otherwise "info". "critical" is reserved and never emitted here (CLI-SPEC §14).
+// otherwise "info" (CLI-SPEC §14).
 func updateNoticeSeverity(current, latest string) string {
 	if cur, ok := parseVersion(current); ok {
 		if next, ok := parseVersion(latest); ok && next[0] > cur[0] {
