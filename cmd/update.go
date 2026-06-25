@@ -29,10 +29,11 @@ const (
 )
 
 var (
-	updateTargetVersion string
-	updateCheckOnly     bool
-	updateExecCommand   = exec.CommandContext
-	updateSkillSync     = runUpdateSkillSync
+	updateTargetVersion     string
+	updateCheckOnly         bool
+	updateExecCommand       = exec.CommandContext
+	updateSkillSync         = runUpdateSkillSync
+	updateRunPackageManager = runPackageManagerInstall
 )
 
 var updateCmd = &cobra.Command{
@@ -154,6 +155,14 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 		emitUpdateReport(report)
 		return nil
 	}
+	// Package-manager-managed installs (npm / go-install): the binary is owned by
+	// the package manager, so instead of mutating its files in place, drive the
+	// manager. --dry-run previews the command without executing it.
+	installMethod := report.InstallMethod
+	if installMethod == "npm" || installMethod == "go-install" {
+		return runPackageManagerUpdate(ctx, report, installMethod, target)
+	}
+
 	if dryRunMode {
 		return emitUpdateDryRun(cmd, report, command)
 	}
@@ -472,6 +481,103 @@ func goInstallBinDirs() []string {
 		dirs = append(dirs, filepath.Join(home, "go", "bin"))
 	}
 	return dirs
+}
+
+// pmInstallCommand returns the shell command an agent/user can run to install
+// the target version via the detected package manager.
+func pmInstallCommand(method, targetVersion string) string {
+	tag := "v" + normalizeVersion(targetVersion)
+	switch method {
+	case "npm":
+		return "npm install -g " + npmPackageName + "@" + normalizeVersion(targetVersion)
+	case "go-install":
+		return "go install " + goInstallTarget + "@" + tag
+	default:
+		return ""
+	}
+}
+
+// runPackageManagerInstall drives the package manager to install the target
+// version. argv is built directly (no shell) so the version string cannot be
+// reinterpreted by a shell.
+func runPackageManagerInstall(ctx context.Context, method, targetVersion string) error {
+	var name string
+	var args []string
+	switch method {
+	case "npm":
+		name = "npm"
+		args = []string{"install", "-g", npmPackageName + "@" + normalizeVersion(targetVersion)}
+	case "go-install":
+		name = "go"
+		args = []string{"install", goInstallTarget + "@v" + normalizeVersion(targetVersion)}
+	default:
+		return fmt.Errorf("unsupported package manager: %s", method)
+	}
+	cmd := updateExecCommand(ctx, name, args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg != "" {
+			return fmt.Errorf("%w: %s", err, truncateUpdateMessage(msg, 300))
+		}
+		return err
+	}
+	return nil
+}
+
+// runPackageManagerUpdate handles `update` for a package-manager-managed install
+// (npm or go-install). The package manager owns download + integrity + replace,
+// so signature_status stays "not_checked". --dry-run is a read-only preview that
+// shows the command without executing it.
+func runPackageManagerUpdate(ctx context.Context, report updateReport, method, targetVersion string) error {
+	pmCmd := pmInstallCommand(method, targetVersion)
+	report.Commands = []string{pmCmd}
+	report.RecommendedAction = pmCmd
+
+	if dryRunMode {
+		report.Status = "dry_run"
+		report.Preview = map[string]any{
+			"action": "update cnstock-cli via " + method,
+			"changes": []map[string]any{
+				{"operation": "install via " + method, "command": pmCmd},
+				{"operation": "sync skill directory", "command": report.SkillSyncCommand},
+			},
+		}
+		emitUpdateReport(report)
+		return nil
+	}
+
+	if err := updateRunPackageManager(ctx, method, targetVersion); err != nil {
+		// Package manager owns replace; a failure leaves the binary unchanged.
+		msg := fmt.Sprintf("package-manager update failed: %s — run %q manually", strings.TrimSpace(err.Error()), pmCmd)
+		details := updateFailDetails(updateStageReplace, version, false, "not_run")
+		details["install_method"] = method
+		details["command"] = pmCmd
+		if outputFormat == "text" {
+			output.Error(msg)
+		} else {
+			output.PrintErrorEnvelopeWithDuration(msg, output.ErrIO, false, details, compactMode, commandDuration())
+		}
+		setExitCode(ExitIO)
+		return ErrSilent
+	}
+
+	// Package manager replaced the binary; this process is still the old image.
+	report.PreviousVersion = version
+	report.Status = "updated"
+	report.SignatureStatus = "not_checked"
+	report.BinaryReplaced = true
+
+	if err := updateSkillSync(ctx, updateSkillRepo); err != nil {
+		report.SkillSyncStatus = "failed"
+		if ctx.Err() != nil {
+			return updateInterrupted(updateStageSkillSync, targetVersion, true, "failed")
+		}
+		return emitUpdatePartialSuccess(report, err)
+	}
+	report.SkillSyncStatus = "synced"
+	emitUpdateReport(report)
+	return nil
 }
 
 func updateSkillSyncCommand() string {

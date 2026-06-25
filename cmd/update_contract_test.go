@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -39,8 +40,10 @@ func captureUpdateRun(t *testing.T, setup func()) (map[string]any, int) {
 	origVerify := updateVerifySignature
 	origPlatform := updateBinaryPlatform
 	origExe := updateBinaryExecutable
+	origProbe := updateBinaryExecutableProbe
 	origAPI := updateBinaryGitHubAPI
 	origClient := updateBinaryHTTPClient
+	origRunPM := updateRunPackageManager
 	origEndpoint := os.Getenv("CNS_UPDATE_ENDPOINT")
 	t.Cleanup(func() {
 		outputFormat, compactMode = origFormat, origCompact
@@ -52,8 +55,10 @@ func captureUpdateRun(t *testing.T, setup func()) (map[string]any, int) {
 		updateVerifySignature = origVerify
 		updateBinaryPlatform = origPlatform
 		updateBinaryExecutable = origExe
+		updateBinaryExecutableProbe = origProbe
 		updateBinaryGitHubAPI = origAPI
 		updateBinaryHTTPClient = origClient
+		updateRunPackageManager = origRunPM
 		_ = os.Setenv("CNS_UPDATE_ENDPOINT", origEndpoint)
 	})
 
@@ -152,10 +157,14 @@ func stubUpdateSeams(srv *httptest.Server, apply func(src, dst string) (updateAp
 	updateBinaryGitHubAPI = srv.URL
 	updateBinaryHTTPClient = srv.Client()
 	updateBinaryPlatform = func() (string, string) { return "linux", "amd64" }
+	// /tmp/cnstock-cli is outside node_modules and GOBIN, so detectInstallMethod
+	// returns "github-binary" — these tests exercise the Sigstore path.
 	updateBinaryExecutable = func() (string, error) { return "/tmp/cnstock-cli", nil }
 	updateVerifySignature = func(_, _, _ string) error { return nil }
 	updateBinaryApply = apply
 	updateSkillSync = skillSync
+	// PM seam is a no-op for github-binary tests; PM-specific tests override this.
+	updateRunPackageManager = func(context.Context, string, string) error { return nil }
 }
 
 func okApply(_, dst string) (updateApplyResult, error) {
@@ -383,5 +392,193 @@ func TestUpdate_DownloadFailureIsRetryable(t *testing.T) {
 	}
 	if details["current_version"] != version {
 		t.Errorf("current_version = %v, want %s (unchanged)", details["current_version"], version)
+	}
+}
+
+// A bare `update` on an npm install DRIVES npm (calls updateRunPackageManager),
+// then syncs the Skill, and reports status "updated". signature_status stays
+// "not_checked" (npm provenance owns integrity on this path).
+func TestUpdate_NPMInstallDrivesPackageManager(t *testing.T) {
+	srv := newUpdateReleaseServer(t, "v9.9.9")
+	root := t.TempDir()
+	pkgRoot := filepath.Join(root, "node_modules", "@fateforge", "cnstock-cli")
+	exe := filepath.Join(pkgRoot, "bin", "cnstock-cli")
+	if err := os.MkdirAll(filepath.Dir(exe), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgRoot, "package.json"), []byte(`{"name":"`+npmPackageName+`"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var gotMethod, gotVersion string
+	var skillSynced bool
+
+	env, exit := captureUpdateRun(t, func() {
+		stubUpdateSeams(srv, func(_, _ string) (updateApplyResult, error) {
+			t.Fatal("npm path must not call binary apply")
+			return updateApplyResult{}, nil
+		}, func(_ context.Context, _ string) error {
+			skillSynced = true
+			return nil
+		})
+		// Point the install-method probe at the npm path so detectInstallMethod
+		// returns "npm"; the binary-update seam is irrelevant on this path.
+		updateBinaryExecutableProbe = func() (string, error) { return exe, nil }
+		updateRunPackageManager = func(_ context.Context, method, targetVer string) error {
+			gotMethod, gotVersion = method, targetVer
+			return nil
+		}
+	})
+	if exit != ExitOK {
+		t.Fatalf("exit = %d, want 0; env: %v", exit, env)
+	}
+	if gotMethod != "npm" {
+		t.Fatalf("expected npm to be driven, got %q", gotMethod)
+	}
+	if normalizeVersion(gotVersion) != "9.9.9" {
+		t.Fatalf("expected target 9.9.9 passed to npm, got %q", gotVersion)
+	}
+	if !skillSynced {
+		t.Fatal("expected Skill sync to run after npm install")
+	}
+	data, _ := env["data"].(map[string]any)
+	if data["status"] != "updated" {
+		t.Errorf("status = %v, want updated", data["status"])
+	}
+	if data["skill_sync_status"] != "synced" {
+		t.Errorf("skill_sync_status = %v, want synced", data["skill_sync_status"])
+	}
+	if data["signature_status"] != "not_checked" {
+		t.Errorf("signature_status = %v, want not_checked (npm path)", data["signature_status"])
+	}
+}
+
+// A bare `update` on a go-install DRIVES go install.
+func TestUpdate_GoInstallDrivesPackageManager(t *testing.T) {
+	srv := newUpdateReleaseServer(t, "v9.9.9")
+	gobin := t.TempDir()
+	exe := filepath.Join(gobin, "cnstock-cli")
+	t.Setenv("GOBIN", gobin)
+	t.Setenv("GOPATH", "")
+
+	var gotMethod string
+
+	env, exit := captureUpdateRun(t, func() {
+		stubUpdateSeams(srv, func(_, _ string) (updateApplyResult, error) {
+			t.Fatal("go-install path must not call binary apply")
+			return updateApplyResult{}, nil
+		}, okSkillSync)
+		updateBinaryExecutableProbe = func() (string, error) { return exe, nil }
+		updateRunPackageManager = func(_ context.Context, method, _ string) error {
+			gotMethod = method
+			return nil
+		}
+	})
+	if exit != ExitOK {
+		t.Fatalf("exit = %d, want 0; env: %v", exit, env)
+	}
+	if gotMethod != "go-install" {
+		t.Fatalf("expected go-install to be driven, got %q", gotMethod)
+	}
+	data, _ := env["data"].(map[string]any)
+	if data["install_method"] != "go-install" {
+		t.Errorf("install_method = %v, want go-install", data["install_method"])
+	}
+}
+
+// --dry-run on a package-manager install is a read-only preview: it must NOT
+// invoke the package manager, and must report the command it WOULD run.
+func TestUpdate_PackageManagerDryRunDoesNotExecute(t *testing.T) {
+	srv := newUpdateReleaseServer(t, "v9.9.9")
+	root := t.TempDir()
+	pkgRoot := filepath.Join(root, "node_modules", "@fateforge", "cnstock-cli")
+	exe := filepath.Join(pkgRoot, "bin", "cnstock-cli")
+	if err := os.MkdirAll(filepath.Dir(exe), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgRoot, "package.json"), []byte(`{"name":"`+npmPackageName+`"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	env, exit := captureUpdateRun(t, func() {
+		stubUpdateSeams(srv, func(_, _ string) (updateApplyResult, error) {
+			t.Fatal("dry-run must not apply binary")
+			return updateApplyResult{}, nil
+		}, func(_ context.Context, _ string) error {
+			t.Fatal("dry-run must not sync skill")
+			return nil
+		})
+		updateBinaryExecutableProbe = func() (string, error) { return exe, nil }
+		updateRunPackageManager = func(context.Context, string, string) error {
+			t.Fatal("dry-run must not invoke the package manager")
+			return nil
+		}
+		dryRunMode = true
+	})
+	if exit != ExitOK {
+		t.Fatalf("exit = %d, want 0; env: %v", exit, env)
+	}
+	data, _ := env["data"].(map[string]any)
+	if data["status"] != "dry_run" {
+		t.Errorf("status = %v, want dry_run", data["status"])
+	}
+	if _, ok := data["preview"]; !ok {
+		t.Error("dry-run must include a preview")
+	}
+	// The preview must contain the npm install command.
+	preview, _ := data["preview"].(map[string]any)
+	changes, _ := preview["changes"].([]any)
+	if len(changes) == 0 {
+		t.Error("dry-run preview must list changes")
+	}
+	found := false
+	for _, c := range changes {
+		cm, _ := c.(map[string]any)
+		if cmd, _ := cm["command"].(string); strings.Contains(cmd, npmPackageName) {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected npm package command in dry-run preview: %v", data["preview"])
+	}
+}
+
+// When the package manager fails, the installed binary is unchanged: report
+// E_IO (exit 1), binary_replaced:false, and surface the command to run manually.
+func TestUpdate_PackageManagerFailureReportsUnchanged(t *testing.T) {
+	srv := newUpdateReleaseServer(t, "v9.9.9")
+	root := t.TempDir()
+	pkgRoot := filepath.Join(root, "node_modules", "@fateforge", "cnstock-cli")
+	exe := filepath.Join(pkgRoot, "bin", "cnstock-cli")
+	if err := os.MkdirAll(filepath.Dir(exe), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgRoot, "package.json"), []byte(`{"name":"`+npmPackageName+`"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	env, exit := captureUpdateRun(t, func() {
+		stubUpdateSeams(srv, okApply, okSkillSync)
+		updateBinaryExecutableProbe = func() (string, error) { return exe, nil }
+		updateRunPackageManager = func(context.Context, string, string) error {
+			return errors.New("ETARGET no matching version")
+		}
+	})
+	if exit != ExitIO {
+		t.Fatalf("exit = %d, want %d (E_IO); env: %v", exit, ExitIO, env)
+	}
+	errObj, _ := env["error"].(map[string]any)
+	if errObj["code"] != "E_IO" {
+		t.Errorf("code = %v, want E_IO", errObj["code"])
+	}
+	if errObj["retryable"] != false {
+		t.Errorf("retryable = %v, want false", errObj["retryable"])
+	}
+	details, _ := errObj["details"].(map[string]any)
+	if details["binary_replaced"] != false {
+		t.Errorf("binary_replaced = %v, want false", details["binary_replaced"])
+	}
+	if cmd, _ := details["command"].(string); !strings.Contains(cmd, npmPackageName) {
+		t.Errorf("expected npm command in failure details, got %q", cmd)
 	}
 }

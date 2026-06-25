@@ -8,9 +8,14 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/fatecannotbealtered/cnstock-cli/internal/contract"
 )
 
-const SchemaVersion = "1.0"
+// SchemaVersion is sourced from the canonical contract (contract/contract.json
+// via internal/contract/contract_gen.go), so the JSON schema version cannot drift
+// from the fleet contract.
+const SchemaVersion = contract.SchemaVersion
 
 // Envelope is the stable machine-readable response wrapper for JSON output.
 type Envelope struct {
@@ -232,20 +237,21 @@ func writeJSON(w io.Writer, v any, compact bool) {
 }
 
 // IsRetryable reports whether an error code denotes a transient failure an agent
-// should back off and retry. It is the single source of truth for the
-// code->retryable mapping; the error-envelope helpers and the cmd-layer update
-// failure path both route through it so the two cannot drift.
+// should back off and retry. Sourced from the canonical contract
+// (internal/contract) so it cannot drift from the fleet's retryability table.
 func IsRetryable(code ErrorCode) bool {
-	return isRetryable(code)
+	return contract.Retryable(string(code))
 }
 
 func isRetryable(code ErrorCode) bool {
-	switch code {
-	case ErrNetwork, ErrServer, ErrRateLimit, ErrTimeout, ErrInterrupted:
-		return true
-	default:
-		return false
-	}
+	return contract.Retryable(string(code))
+}
+
+// ExitCodeForErrorCode maps a semantic error code to its process exit code.
+// Sourced from the canonical contract (internal/contract), so it cannot drift
+// from the fleet's E_* -> exit table.
+func ExitCodeForErrorCode(code ErrorCode) int {
+	return contract.ExitFor(string(code))
 }
 
 func hintForCode(code ErrorCode) string {

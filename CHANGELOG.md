@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Fleet contract single-source: `contract/contract.json` (vendored from ai-native-cli-spec@v1.4) and the generated `internal/contract/contract_gen.go` are now the canonical exit-code and retryability source for this tool. All error-code→exit and code→retryable lookups in `internal/output` now delegate to `contract.ExitFor`/`contract.Retryable` so the mapping cannot drift. `contract/contract-ext.json` declares the tool-specific `E_HUMAN_REQUIRED` (exit 9) extension code.
+- Conformance test `internal/output/contract_conformance_test.go` asserts every emitted `E_*` code is in the canonical contract with exact exit+retryable, schema_version matches, and envelope keys are within the canonical sets — CI-red guard against drift.
+- CI step "Verify spec/contract sync" (`node scripts/check-spec.js`) added after "Verify version sync" in the `npm-audit` job, enforcing that vendored `.agent` specs and generated `contract_gen.go` cannot silently fork the template.
+
+### Changed
+
+- `.agent` directory is now single-sourced from ai-native-cli-spec@v1.4 (synced via `node scripts/sync-spec.js`); `.agent/SPEC_VERSION` pins the tag.
+- `update` now **drives the package manager** for npm and go-install installs (`npm install -g <pkg>@<ver>` or `go install <pkg>@<ver>`) instead of always running in-process Sigstore+binary-replace regardless of install method. Package-manager integrity is the PM's own; `signature_status` stays `"not_checked"` on this path. A testable seam (`updateRunPackageManager`) allows tests to stub the PM without shelling out. `--dry-run` previews the PM command without executing it; a PM failure reports `E_IO` with `binary_replaced:false` and the manual command.
+
 ## [1.1.9] - 2026-06-25
 
 ### Changed

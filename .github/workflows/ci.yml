@@ -111,6 +111,11 @@ jobs:
       - name: Verify version sync
         run: node scripts/check-version.js
 
+      # Fail-closed: the vendored .agent specs + contract.json must match the
+      # pinned ai-native-cli-spec tag, and contract_gen must match contract.json.
+      - name: Verify spec/contract sync
+        run: node scripts/check-spec.js
+
   build:
     name: Build
     strategy:
