@@ -160,7 +160,7 @@ func stubUpdateSeams(srv *httptest.Server, apply func(src, dst string) (updateAp
 	// /tmp/cnstock-cli is outside node_modules and GOBIN, so detectInstallMethod
 	// returns "github-binary" — these tests exercise the Sigstore path.
 	updateBinaryExecutable = func() (string, error) { return "/tmp/cnstock-cli", nil }
-	updateVerifySignature = func(_, _, _ string) error { return nil }
+	updateVerifySignature = func(_ context.Context, _, _, _ string) error { return nil }
 	updateBinaryApply = apply
 	updateSkillSync = skillSync
 	// PM seam is a no-op for github-binary tests; PM-specific tests override this.
@@ -267,7 +267,7 @@ func TestUpdate_IntegrityFailureNonRetryable(t *testing.T) {
 	srv := newUpdateReleaseServer(t, "v9.9.9")
 	env, exit := captureUpdateRun(t, func() {
 		stubUpdateSeams(srv, okApply, okSkillSync)
-		updateVerifySignature = func(_, _, _ string) error { return errors.New("certificate identity mismatch") }
+		updateVerifySignature = func(_ context.Context, _, _, _ string) error { return errors.New("certificate identity mismatch") }
 	})
 	if exit != ExitGeneric {
 		t.Fatalf("exit = %d, want 1 (E_INTEGRITY); env: %v", exit, env)

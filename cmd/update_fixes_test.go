@@ -182,7 +182,7 @@ func TestUpdate_SignatureBundleDownloadFailureIsRetryable(t *testing.T) {
 	env, exit := captureUpdateRun(t, func() {
 		stubUpdateSeams(srv, okApply, okSkillSync)
 		// The verify seam must never be reached because the bundle never downloads.
-		updateVerifySignature = func(_, _, _ string) error {
+		updateVerifySignature = func(_ context.Context, _, _, _ string) error {
 			t.Fatal("signature verify must not run when the bundle download failed")
 			return nil
 		}
@@ -221,7 +221,7 @@ func TestUpdate_InterruptDuringVerifyIsInterrupted(t *testing.T) {
 
 	env, exit := captureUpdateRun(t, func() {
 		stubUpdateSeams(srv, okApply, okSkillSync)
-		updateVerifySignature = func(_, _, _ string) error {
+		updateVerifySignature = func(_ context.Context, _, _, _ string) error {
 			cancel() // Ctrl-C arrives while verifying.
 			return errors.New("certificate identity mismatch")
 		}

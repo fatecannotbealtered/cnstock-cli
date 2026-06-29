@@ -56,13 +56,13 @@ func TestVerifyUpdateChecksumSignature_FailClosed(t *testing.T) {
 	defer func() { updateBinaryHTTPClient = origClient; updateVerifySignature = origVerify }()
 	updateBinaryHTTPClient = srv.Client()
 
-	updateVerifySignature = func(_, _, _ string) error { return nil }
+	updateVerifySignature = func(_ context.Context, _, _, _ string) error { return nil }
 	status, err := verifyUpdateChecksumSignature(context.Background(), tmp+"/c.txt", srv.URL+"/b.json", tmp)
 	if err != nil || status != "verified" {
 		t.Fatalf("expected verified, got status=%q err=%v", status, err)
 	}
 
-	updateVerifySignature = func(_, _, _ string) error { return errors.New("certificate identity mismatch") }
+	updateVerifySignature = func(_ context.Context, _, _, _ string) error { return errors.New("certificate identity mismatch") }
 	if _, err := verifyUpdateChecksumSignature(context.Background(), tmp+"/c.txt", srv.URL+"/b.json", tmp); err == nil {
 		t.Fatal("signature verification failure must abort")
 	}
