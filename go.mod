@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/sigstore/sigstore-go v1.2.1
 	github.com/spf13/cobra v1.10.2
-	github.com/theupdateframework/go-tuf/v2 v2.4.2-0.20260407074541-7e8f69f906ef
+	github.com/theupdateframework/go-tuf/v2 v2.4.2
 	golang.org/x/term v0.44.0
 	golang.org/x/text v0.38.0
 )
