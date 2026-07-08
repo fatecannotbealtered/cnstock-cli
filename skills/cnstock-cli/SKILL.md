@@ -1,10 +1,10 @@
 ---
 name: cnstock-cli
-version: "1.1.12"
+version: "1.1.13"
 description: "Real-time quotes, K-line history, intraday minutes, stock search, sector ranking, and whole-market breadth for A-shares, HK stocks, US stocks, indices, and funds via cnstock-cli. Use when users ask for stock prices, market data, stock-code lookup, K-line history, intraday data, sectors, or Chinese market breadth."
 license: MIT
 user-invocable: true
-metadata: {"requires":{"bins":["cnstock-cli"],"min_version":"1.1.12"}}
+metadata: {"requires":{"bins":["cnstock-cli"],"min_version":"1.1.13"}}
 ---
 
 # cnstock-cli
@@ -122,6 +122,8 @@ cnstock-cli sectors --board hy --top 10 --direction up --compact
 
 `update` is a **single command with no confirm token**. A bare `cnstock-cli update` performs the whole self-update in one call — resolve the latest (or `--target-version`) release, update the binary, then sync the whole Agent Skill directory. It is idempotent: already on the latest version returns `ok` with a no-op. `--check` and `--dry-run` are optional read-only flags and issue no token. The Skill sync end state matches `npx skills add fatecannotbealtered/cnstock-cli -y -g`.
 
+Successful update results are final-state: `current_version` must equal `target_version`, `update_available` must be `false`, and stale `update_available` notices must be cleared or suppressed before later commands attach `meta.notices`. An already-current install must return a no-op result without running a package-manager install command.
+
 The update mechanism depends on how the binary was installed (`install_method`):
 
 - **`github-binary`**: Download + verify integrity in-process (Sigstore signature, then SHA256 checksum) + replace binary. `signature_status` is `"verified"` on success; a missing/invalid signature or checksum mismatch returns non-retryable `E_INTEGRITY`.
@@ -138,7 +140,7 @@ Every update failure (and a SIGINT/SIGTERM interrupt) carries `stage`, `current_
 - integrity failure (`E_INTEGRITY`, exit 1) is **non-retryable** — stop and report a possible supply-chain issue, do not loop.
 - replace-stage local failure: permission → `E_FORBIDDEN` (exit 4), disk/lock/io → `E_IO` (exit 1); `binary_replaced:false`, fix the environment then re-run.
 - discover/download network failure is retryable — re-run `update`, it is idempotent.
-- a Skill-sync failure **after** the binary swap is partial success (`ok:false`, `binary_replaced:true`): run the returned `skill_sync_command`, then `changelog`. Do not use newly documented behavior until the Skill sync completes.
+- a Skill-sync failure **after** the binary swap is partial success (`ok:false`, `binary_replaced:true`) with `target_version`, `update_available:false`, and `skill_sync_command`: run the returned command, then `changelog`. Do not use newly documented behavior until the Skill sync completes.
 - an interrupt emits a terminal `E_INTERRUPTED` envelope (exit 130) stating the true post-state.
 
 After the update succeeds, ensure `skill_sync_status` is `synced`. For `github-binary` installs, also review `signature_status`/`signature_verified` — they will be `"verified"`/`true`. For `npm`/`go-install` installs, `signature_status` stays `"not_checked"` (the package manager owns integrity). Refresh agent knowledge before continuing:

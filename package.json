@@ -1,6 +1,6 @@
 {
   "name": "@fateforge/cnstock-cli",
-  "version": "1.1.12",
+  "version": "1.1.13",
   "description": "Market data lookup CLI for AI Agents - quotes, K-line bars, intraday minutes, stock search, sectors, and market breadth for A/HK/US symbols",
   "keywords": [
     "cnstock",
@@ -33,12 +33,12 @@
     "check-version": "node scripts/check-version.js"
   },
   "optionalDependencies": {
-    "@fateforge/cnstock-cli-darwin-arm64": "1.1.12",
-    "@fateforge/cnstock-cli-darwin-x64": "1.1.12",
-    "@fateforge/cnstock-cli-linux-arm64": "1.1.12",
-    "@fateforge/cnstock-cli-linux-x64": "1.1.12",
-    "@fateforge/cnstock-cli-win32-arm64": "1.1.12",
-    "@fateforge/cnstock-cli-win32-x64": "1.1.12"
+    "@fateforge/cnstock-cli-darwin-arm64": "1.1.13",
+    "@fateforge/cnstock-cli-darwin-x64": "1.1.13",
+    "@fateforge/cnstock-cli-linux-arm64": "1.1.13",
+    "@fateforge/cnstock-cli-linux-x64": "1.1.13",
+    "@fateforge/cnstock-cli-win32-arm64": "1.1.13",
+    "@fateforge/cnstock-cli-win32-x64": "1.1.13"
   },
   "files": [
     "scripts/run.js",

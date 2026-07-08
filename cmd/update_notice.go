@@ -242,7 +242,8 @@ func updateNoticeDisabled() bool {
 // suffix `.test`) so the real test suite never touches the user's cache; a test
 // that exercises the cache path overrides it against a temp HOME.
 var updateNoticeAutoDisabled = func() bool {
-	return updateNoticeDisabled() || strings.HasSuffix(os.Args[0], ".test")
+	exe := strings.ToLower(os.Args[0])
+	return updateNoticeDisabled() || strings.HasSuffix(exe, ".test") || strings.HasSuffix(exe, ".test.exe")
 }
 
 func printUpdateNoticeHint(w io.Writer, notices []updateNotice) {

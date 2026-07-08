@@ -136,7 +136,10 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 	}
 
 	if cmp, ok := compareVersions(version, rel.TagName); ok {
-		available := cmp < 0 || targetVersionRequested(updateTargetVersion, version)
+		available := cmp < 0
+		if strings.TrimSpace(updateTargetVersion) != "" {
+			available = targetVersionRequested(updateTargetVersion, version)
+		}
 		report.UpdateAvailable = &available
 		if available {
 			report.Status = "available"
@@ -156,7 +159,8 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 	}
 	// Idempotent: already on the latest (or no newer target requested) is a no-op
 	// success, so an agent may call update freely.
-	if report.UpdateAvailable != nil && !*report.UpdateAvailable && strings.TrimSpace(updateTargetVersion) == "" {
+	if report.UpdateAvailable != nil && !*report.UpdateAvailable {
+		writeUpdateNoticeCache(nil)
 		emitUpdateReport(report)
 		return nil
 	}
@@ -209,7 +213,11 @@ func runUpdate(cmd *cobra.Command, _ []string) error {
 	report.SignatureVerified = sigStatus == "verified"
 	report.BinaryReplaced = true
 	report.PreviousVersion = version
+	report.CurrentVersion = target
+	available := false
+	report.UpdateAvailable = &available
 	report.Status = "updated"
+	writeUpdateNoticeCache(nil)
 
 	// Skill sync runs AFTER the swap. A failure here is PARTIAL SUCCESS: the
 	// binary is already on the new version, the agent just needs to run the skill
@@ -281,6 +289,8 @@ func emitUpdatePartialSuccess(report updateReport, syncErr error) error {
 	details := updateFailDetails(updateStageSkillSync, report.TargetVersion, true, "failed")
 	details["skill_sync_command"] = report.SkillSyncCommand
 	details["previous_version"] = report.PreviousVersion
+	details["target_version"] = report.TargetVersion
+	details["update_available"] = false
 	details["signature_status"] = report.SignatureStatus
 	output.PrintErrorEnvelopeWithDuration(msg, output.ErrNetwork, true, details, compactMode, commandDuration())
 	setExitCode(ExitNetwork)
@@ -570,9 +580,13 @@ func runPackageManagerUpdate(ctx context.Context, report updateReport, method, t
 
 	// Package manager replaced the binary; this process is still the old image.
 	report.PreviousVersion = version
+	report.CurrentVersion = targetVersion
+	available := false
+	report.UpdateAvailable = &available
 	report.Status = "updated"
 	report.SignatureStatus = "not_checked"
 	report.BinaryReplaced = true
+	writeUpdateNoticeCache(nil)
 
 	if err := updateSkillSync(ctx, updateSkillRepo); err != nil {
 		report.SkillSyncStatus = "failed"

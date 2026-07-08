@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/fatecannotbealtered/cnstock-cli/internal/output"
 )
 
 // Single-command update contract tests (CLI-SPEC §14): a bare `update` runs the
@@ -190,6 +192,15 @@ func TestUpdate_BareExecutesWithoutToken(t *testing.T) {
 	if data["status"] != "updated" {
 		t.Errorf("status = %v, want updated", data["status"])
 	}
+	if data["current_version"] != "9.9.9" {
+		t.Errorf("current_version = %v, want 9.9.9", data["current_version"])
+	}
+	if data["target_version"] != "9.9.9" {
+		t.Errorf("target_version = %v, want 9.9.9", data["target_version"])
+	}
+	if data["update_available"] != false {
+		t.Errorf("update_available = %v, want false after successful update", data["update_available"])
+	}
 	if data["binary_replaced"] != true {
 		t.Errorf("binary_replaced = %v, want true", data["binary_replaced"])
 	}
@@ -358,6 +369,12 @@ func TestUpdate_SkillSyncFailureIsPartialSuccess(t *testing.T) {
 	if details["stage"] != updateStageSkillSync {
 		t.Errorf("stage = %v, want skill_sync", details["stage"])
 	}
+	if details["target_version"] != "9.9.9" {
+		t.Errorf("target_version = %v, want 9.9.9", details["target_version"])
+	}
+	if details["update_available"] != false {
+		t.Errorf("update_available = %v, want false", details["update_available"])
+	}
 	if _, ok := details["skill_sync_command"]; !ok {
 		t.Error("partial success must carry skill_sync_command")
 	}
@@ -445,11 +462,90 @@ func TestUpdate_NPMInstallDrivesPackageManager(t *testing.T) {
 	if data["status"] != "updated" {
 		t.Errorf("status = %v, want updated", data["status"])
 	}
+	if data["current_version"] != "9.9.9" {
+		t.Errorf("current_version = %v, want 9.9.9", data["current_version"])
+	}
+	if data["target_version"] != "9.9.9" {
+		t.Errorf("target_version = %v, want 9.9.9", data["target_version"])
+	}
+	if data["update_available"] != false {
+		t.Errorf("update_available = %v, want false after successful update", data["update_available"])
+	}
 	if data["skill_sync_status"] != "synced" {
 		t.Errorf("skill_sync_status = %v, want synced", data["skill_sync_status"])
 	}
 	if data["signature_status"] != "not_checked" {
 		t.Errorf("signature_status = %v, want not_checked (npm path)", data["signature_status"])
+	}
+}
+
+func TestUpdate_NPMExplicitCurrentTargetNoOpDoesNotInstall(t *testing.T) {
+	origVersion := version
+	version = "1.2.3"
+	t.Cleanup(func() { version = origVersion })
+	origProvider := output.UpdateNoticesProvider
+	output.UpdateNoticesProvider = cachedUpdateNoticesAsAny
+	t.Cleanup(func() { output.UpdateNoticesProvider = origProvider })
+
+	enableUpdateNoticeCache(t)
+	seedUpdateNoticeCache(t, "warning")
+	path, err := updateNoticeCachePath()
+	if err != nil {
+		t.Fatalf("updateNoticeCachePath: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("seed cache not written: %v", err)
+	}
+
+	srv := newUpdateReleaseServer(t, "v9.9.9")
+	root := t.TempDir()
+	pkgRoot := filepath.Join(root, "node_modules", "@fateforge", "cnstock-cli")
+	exe := filepath.Join(pkgRoot, "bin", "cnstock-cli")
+	if err := os.MkdirAll(filepath.Dir(exe), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgRoot, "package.json"), []byte(`{"name":"`+npmPackageName+`"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	env, exit := captureUpdateRun(t, func() {
+		stubUpdateSeams(srv, func(_, _ string) (updateApplyResult, error) {
+			t.Fatal("explicit current target must not apply binary")
+			return updateApplyResult{}, nil
+		}, func(context.Context, string) error {
+			t.Fatal("explicit current target must not sync skill")
+			return nil
+		})
+		updateTargetVersion = version
+		updateBinaryExecutableProbe = func() (string, error) { return exe, nil }
+		updateRunPackageManager = func(context.Context, string, string) error {
+			t.Fatal("explicit current target must not invoke the package manager")
+			return nil
+		}
+	})
+	if exit != ExitOK {
+		t.Fatalf("exit = %d, want 0; env: %v", exit, env)
+	}
+	data, _ := env["data"].(map[string]any)
+	if data["status"] != "up_to_date" {
+		t.Errorf("status = %v, want up_to_date", data["status"])
+	}
+	if data["current_version"] != version {
+		t.Errorf("current_version = %v, want %s", data["current_version"], version)
+	}
+	if data["target_version"] != normalizeVersion(version) {
+		t.Errorf("target_version = %v, want %s", data["target_version"], normalizeVersion(version))
+	}
+	if data["update_available"] != false {
+		t.Errorf("update_available = %v, want false", data["update_available"])
+	}
+	if meta, _ := env["meta"].(map[string]any); meta != nil {
+		if _, ok := meta["notices"]; ok {
+			t.Fatalf("no-op update must not emit stale meta.notices: %#v", meta)
+		}
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("notice cache should be cleared after no-op update, stat err = %v", err)
 	}
 }
 
@@ -483,6 +579,50 @@ func TestUpdate_GoInstallDrivesPackageManager(t *testing.T) {
 	data, _ := env["data"].(map[string]any)
 	if data["install_method"] != "go-install" {
 		t.Errorf("install_method = %v, want go-install", data["install_method"])
+	}
+	if data["current_version"] != "9.9.9" {
+		t.Errorf("current_version = %v, want 9.9.9", data["current_version"])
+	}
+	if data["update_available"] != false {
+		t.Errorf("update_available = %v, want false after successful update", data["update_available"])
+	}
+}
+
+func TestUpdate_NPMInstallClearsNoticeCache(t *testing.T) {
+	enableUpdateNoticeCache(t)
+	seedUpdateNoticeCache(t, "info")
+	path, err := updateNoticeCachePath()
+	if err != nil {
+		t.Fatalf("updateNoticeCachePath: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("seed cache not written: %v", err)
+	}
+
+	srv := newUpdateReleaseServer(t, "v9.9.9")
+	root := t.TempDir()
+	pkgRoot := filepath.Join(root, "node_modules", "@fateforge", "cnstock-cli")
+	exe := filepath.Join(pkgRoot, "bin", "cnstock-cli")
+	if err := os.MkdirAll(filepath.Dir(exe), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgRoot, "package.json"), []byte(`{"name":"`+npmPackageName+`"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	env, exit := captureUpdateRun(t, func() {
+		stubUpdateSeams(srv, func(_, _ string) (updateApplyResult, error) {
+			t.Fatal("npm path must not call binary apply")
+			return updateApplyResult{}, nil
+		}, okSkillSync)
+		updateBinaryExecutableProbe = func() (string, error) { return exe, nil }
+		updateRunPackageManager = func(context.Context, string, string) error { return nil }
+	})
+	if exit != ExitOK {
+		t.Fatalf("exit = %d, want 0; env: %v", exit, env)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("notice cache should be cleared after package-manager install, stat err = %v", err)
 	}
 }
 

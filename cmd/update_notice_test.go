@@ -143,6 +143,22 @@ func TestMetaNotices_AbsentWhenCacheEmpty(t *testing.T) {
 	}
 }
 
+func TestUpdateNoticeAutoDisabledDetectsWindowsGoTestBinary(t *testing.T) {
+	orig := updateNoticeAutoDisabled
+	origArgs := os.Args
+	t.Cleanup(func() {
+		updateNoticeAutoDisabled = orig
+		os.Args = origArgs
+	})
+	os.Args = []string{`C:\Users\me\AppData\Local\Temp\cmd.test.exe`}
+	t.Setenv(updateNoticeEnvOptOut, "")
+	t.Setenv(updateNoticeLegacyOptOut, "")
+
+	if !updateNoticeAutoDisabled() {
+		t.Fatal("Windows Go test binary must not write the real update notice cache")
+	}
+}
+
 // meta.notices is ABSENT when the cache is expired (older than the TTL).
 func TestMetaNotices_AbsentWhenCacheExpired(t *testing.T) {
 	enableUpdateNoticeCache(t)
