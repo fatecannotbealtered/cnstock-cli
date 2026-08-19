@@ -101,6 +101,14 @@ func updateNoticeSeverity(current, latest string) string {
 		}
 	}
 	for _, entry := range filterChangelogSince(parseChangelog(project.ChangelogMarkdown), current) {
+		// filterChangelogSince keeps the Unreleased section so `changelog` can
+		// show what is coming, but an update notice only ever offers a released
+		// version. Counting Unreleased here would raise every notice to
+		// "warning" as soon as an unshipped security entry lands in the working
+		// tree, for an upgrade that cannot contain it yet.
+		if strings.EqualFold(entry.Version, "Unreleased") {
+			continue
+		}
 		if len(entry.Changes["security"]) > 0 {
 			return "warning"
 		}

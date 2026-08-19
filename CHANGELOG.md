@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Raise the Go toolchain to 1.26.6 to clear four reachable Go standard-library
+  vulnerabilities reported by `govulncheck`: GO-2026-6218 (`net/url`),
+  GO-2026-6090 (`crypto/tls`), GO-2026-5972 (`encoding/asn1`), and
+  GO-2026-5026 (`net/http`).
+
+### Fixed
+
+- Update notices no longer read the `Unreleased` changelog section when
+  choosing their severity. An unshipped `### Security` entry used to promote
+  every notice to `warning`, even though the upgrade being offered is a
+  released version that cannot contain that fix yet. The `changelog` command
+  still shows `Unreleased` as before.
+
 ## [1.1.13] - 2026-07-08
 
 ### Fixed
