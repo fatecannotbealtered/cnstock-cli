@@ -109,6 +109,15 @@ func updateNoticeSeverity(current, latest string) string {
 		if strings.EqualFold(entry.Version, "Unreleased") {
 			continue
 		}
+		// The delta this notice describes is (current, latest]. filterChangelogSince
+		// bounds only the lower end, so without this an entry NEWER than the version
+		// being offered still counts -- the notice would claim "this upgrade carries
+		// a security fix" about a fix the upgrade does not deliver. An unparseable
+		// or absent latest leaves the scan unbounded above, which is the old
+		// behaviour and the safe direction.
+		if cmp, ok := compareVersions(entry.Version, latest); ok && cmp > 0 {
+			continue
+		}
 		if len(entry.Changes["security"]) > 0 {
 			return "warning"
 		}

@@ -227,8 +227,14 @@ func TestUpdateNoticeSeverity(t *testing.T) {
 		{"security entry in delta", "1.1.4", "1.1.6", "warning"},
 		// Major bump regardless of changelog content -> warning.
 		{"major bump", "1.5.0", "2.0.0", "warning"},
-		// Plain patch with no security entry in the delta -> info.
+		// Plain patch with no security entry in the delta -> info. This also
+		// pins the UPPER bound: the embedded changelog has security entries at
+		// versions well above 1.1.7, and an upgrade to 1.1.7 does not deliver
+		// them, so they must not raise this notice.
 		{"plain patch", "1.1.6", "1.1.7", "info"},
+		// The nearest security entry is above the offered version, not inside
+		// the delta.
+		{"security entry above the offered version", "1.1.4", "1.1.4", "info"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

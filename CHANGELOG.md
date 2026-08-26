@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.14] - 2026-08-26
+
 ### Security
 
 - Raise the Go toolchain to 1.26.6 to clear four reachable Go standard-library
@@ -25,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every notice to `warning`, even though the upgrade being offered is a
   released version that cannot contain that fix yet. The `changelog` command
   still shows `Unreleased` as before.
+- Update-notice severity now bounds the changelog delta at the version being
+  offered, not just at the running one. `filterChangelogSince` bounds only the
+  lower end, so a security entry at a version ABOVE the offered upgrade still
+  counted — an upgrade from 1.1.6 to 1.1.7 reported `warning` because 1.1.14
+  carries a security fix, which that upgrade does not deliver. The notice was
+  telling an agent the upgrade contains a fix it does not contain.
 - The CI job that runs `check-spec.js` now sets up Go. It had Node only and
   worked purely because the GitHub runner image happens to preinstall Go — one
   image change away from every Go tool in the fleet reporting phantom contract
